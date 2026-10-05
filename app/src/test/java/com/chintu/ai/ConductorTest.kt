@@ -8,7 +8,7 @@ import org.junit.Test
 class ConductorTest {
 
     @Test
-    fun workerLifecycle() {
+    fun startWorker() {
         val conductor = Conductor()
 
         val worker = conductor.start("test-worker")
@@ -20,44 +20,65 @@ class ConductorTest {
             worker.status
         )
 
+        assertTrue(
+            conductor.snapshot().any {
+                it.id == worker.id
+            }
+        )
+    }
+
+    @Test
+    fun updateWorkerToRunning() {
+        val conductor = Conductor()
+
+        val worker = conductor.start("test-worker")
+
         conductor.update(
             worker.id,
             WorkerStatus.RUNNING
         )
 
-        val running =
-            conductor
-                .snapshot()
-                .firstOrNull {
-                    it.id == worker.id
-                }
+        val updated = conductor
+            .snapshot()
+            .firstOrNull {
+                it.id == worker.id
+            }
 
-        assertNotNull(running)
+        assertNotNull(updated)
+
         assertEquals(
             WorkerStatus.RUNNING,
-            running?.status
+            updated?.status
         )
+    }
+
+    @Test
+    fun completeWorkerWithResult() {
+        val conductor = Conductor()
+
+        val worker = conductor.start("test-worker")
 
         conductor.update(
             worker.id,
             WorkerStatus.COMPLETED,
-            "Test completed"
+            "Test completed successfully"
         )
 
-        val completed =
-            conductor
-                .snapshot()
-                .firstOrNull {
-                    it.id == worker.id
-                }
+        val completed = conductor
+            .snapshot()
+            .firstOrNull {
+                it.id == worker.id
+            }
 
         assertNotNull(completed)
+
         assertEquals(
             WorkerStatus.COMPLETED,
             completed?.status
         )
+
         assertEquals(
-            "Test completed",
+            "Test completed successfully",
             completed?.result
         )
     }
@@ -70,14 +91,14 @@ class ConductorTest {
 
         conductor.cancel(worker.id)
 
-        val cancelled =
-            conductor
-                .snapshot()
-                .firstOrNull {
-                    it.id == worker.id
-                }
+        val cancelled = conductor
+            .snapshot()
+            .firstOrNull {
+                it.id == worker.id
+            }
 
         assertNotNull(cancelled)
+
         assertEquals(
             WorkerStatus.CANCELLED,
             cancelled?.status
@@ -93,17 +114,21 @@ class ConductorTest {
 
         val workers = conductor.snapshot()
 
-        assertTrue(
-            workers.any { it.id == first.id }
-        )
-
-        assertTrue(
-            workers.any { it.id == second.id }
-        )
-
         assertEquals(
             2,
             workers.size
+        )
+
+        assertTrue(
+            workers.any {
+                it.id == first.id
+            }
+        )
+
+        assertTrue(
+            workers.any {
+                it.id == second.id
+            }
         )
     }
 }
