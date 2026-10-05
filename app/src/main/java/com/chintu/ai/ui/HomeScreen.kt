@@ -42,7 +42,7 @@ fun HomeScreen(
     onQuickAction: (String) -> Unit
 ) {
     Scaffold(
-        containerColor = ChintuBackground,
+        containerColor = ChintuColors.Background,
 
         topBar = {
             TopAppBar(
@@ -50,7 +50,7 @@ fun HomeScreen(
                     Column {
                         Text(
                             text = "CHINTU",
-                            color = ChintuText,
+                            color = ChintuColors.TextPrimary,
                             fontWeight = FontWeight.Bold
                         )
 
@@ -60,7 +60,7 @@ fun HomeScreen(
                             } else {
                                 model
                             },
-                            color = ChintuMuted,
+                            color = ChintuColors.TextMuted,
                             style = androidx.compose.material3.MaterialTheme.typography.labelSmall
                         )
                     }
@@ -73,7 +73,7 @@ fun HomeScreen(
                 actions = {
                     AssistChip(
                         onClick = {
-                            onSettings()
+                            onModeClick(mode)
                         },
                         label = {
                             Text(mode.name)
@@ -81,14 +81,12 @@ fun HomeScreen(
                     )
 
                     IconButton(
-                        onClick = {
-                            onSettings()
-                        }
+                        onClick = onSettings
                     ) {
                         Icon(
                             imageVector = Icons.Default.Settings,
                             contentDescription = "Settings",
-                            tint = ChintuText
+                            tint = ChintuColors.TextPrimary
                         )
                     }
                 }
@@ -97,13 +95,13 @@ fun HomeScreen(
 
         bottomBar = {
             InputBar(
-                input = input,
-                status = status,
-                onInputChange = onInputChange,
+                value = input,
+                onValueChange = onInputChange,
                 onVoice = onVoice,
                 onSend = onSend
             )
         }
+
     ) { paddingValues ->
 
         Column(
@@ -113,8 +111,8 @@ fun HomeScreen(
                 .background(
                     Brush.verticalGradient(
                         listOf(
-                            ChintuTop,
-                            ChintuBackground
+                            ChintuColors.Surface,
+                            ChintuColors.Background
                         )
                     )
                 )
@@ -146,7 +144,6 @@ fun HomeScreen(
                 ) {
 
                     items(messages.reversed()) { message ->
-
                         MessageBubble(message)
                     }
                 }
@@ -157,7 +154,7 @@ fun HomeScreen(
             )
 
             PrivacyFooter(
-                mode = mode
+                mode = mode.name
             )
         }
     }
