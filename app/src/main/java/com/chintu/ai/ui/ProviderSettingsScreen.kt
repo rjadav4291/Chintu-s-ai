@@ -86,8 +86,7 @@ fun ProviderSettingsScreen(
 
     LaunchedEffect(provider) {
 
-        apiKey =
-            apiKeyStore.getApiKey(provider)
+        apiKey = apiKeyStore.getApiKey(provider)
 
         serverUrl =
             serverConfigStore.getServerUrl(provider)
@@ -116,19 +115,13 @@ fun ProviderSettingsScreen(
     ) {
 
         TopAppBar(
-
             title = {
-                Text(
-                    "CHINTU AI Settings"
-                )
+                Text("CHINTU AI Settings")
             },
-
             navigationIcon = {
-
                 IconButton(
                     onClick = onBack
                 ) {
-
                     Icon(
                         imageVector = Icons.Default.ArrowBack,
                         contentDescription = "Back"
@@ -143,7 +136,6 @@ fun ProviderSettingsScreen(
 
         ProviderSelector(
             selectedProvider = provider,
-
             onProviderSelected = {
                 provider = it
             }
@@ -159,30 +151,22 @@ fun ProviderSettingsScreen(
         if (providerInfo?.requiresApiKey == true) {
 
             OutlinedTextField(
-
                 value = apiKey,
-
                 onValueChange = {
                     apiKey = it
                 },
-
                 modifier = Modifier.fillMaxWidth(),
-
                 label = {
                     Text("API Key")
                 },
-
                 leadingIcon = {
-
                     Icon(
                         imageVector = Icons.Default.Key,
                         contentDescription = null
                     )
                 },
-
                 visualTransformation =
                     PasswordVisualTransformation(),
-
                 singleLine = true
             )
 
@@ -192,27 +176,20 @@ fun ProviderSettingsScreen(
         }
 
         OutlinedTextField(
-
             value = serverUrl,
-
             onValueChange = {
                 serverUrl = it
             },
-
             modifier = Modifier.fillMaxWidth(),
-
             label = {
                 Text("Server URL")
             },
-
             leadingIcon = {
-
                 Icon(
                     imageVector = Icons.Default.Language,
                     contentDescription = null
                 )
             },
-
             singleLine = true
         )
 
@@ -221,13 +198,9 @@ fun ProviderSettingsScreen(
         )
 
         ModelSelector(
-
             provider = provider,
-
             selectedModel = model,
-
             modelManager = modelManager,
-
             onModelSelected = {
                 model = it
             }
@@ -238,22 +211,16 @@ fun ProviderSettingsScreen(
         )
 
         Row(
-
             modifier = Modifier.fillMaxWidth(),
-
             horizontalArrangement =
                 Arrangement.spacedBy(10.dp)
-
         ) {
 
             Button(
-
                 onClick = {
 
                     testing = true
-
-                    status =
-                        "Testing connection..."
+                    status = "Testing connection..."
 
                     scope.launch {
 
@@ -264,57 +231,49 @@ fun ProviderSettingsScreen(
                             )
 
                         testing = false
-
-                        status =
-                            result.message
+                        status = result.message
                     }
                 },
-
                 enabled = !testing,
-
-                modifier =
-                    Modifier.weight(1f)
-
+                modifier = Modifier.weight(1f)
             ) {
 
                 Text(
-                    if (testing) {
+                    text = if (testing) {
                         "Testing..."
                     } else {
                         "Test Connection"
                     }
-                }
+                )
             }
 
             Button(
-
                 onClick = {
 
                     providerManager.saveSettings(
-                        provider,
-                        apiKey,
-                        serverUrl,
-                        model
+                        provider = provider,
+                        apiKey = apiKey,
+                        serverUrl = serverUrl,
+                        model = model
                     )
 
                     if (apiKey.isNotBlank()) {
-
                         apiKeyStore.saveApiKey(
-                            provider,
-                            apiKey
+                            provider = provider,
+                            apiKey = apiKey
                         )
                     }
 
                     serverConfigStore.saveServerUrl(
-                        provider,
-                        serverUrl
+                        provider = provider,
+                        url = serverUrl
                     )
 
                     if (model.isNotBlank()) {
 
                         modelManager.addModel(
-                            model,
-                            provider
+                            name = model,
+                            provider = provider
                         )
 
                         modelManager.selectModel(
@@ -325,10 +284,7 @@ fun ProviderSettingsScreen(
                     status =
                         "Settings saved successfully."
                 },
-
-                modifier =
-                    Modifier.weight(1f)
-
+                modifier = Modifier.weight(1f)
             ) {
 
                 Icon(
@@ -351,4 +307,4 @@ fun ProviderSettingsScreen(
             )
         }
     }
-                    }
+}
