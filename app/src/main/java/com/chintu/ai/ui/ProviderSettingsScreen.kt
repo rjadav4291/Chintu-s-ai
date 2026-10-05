@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -39,6 +40,7 @@ import com.chintu.ai.ai.ProviderManager
 import com.chintu.ai.ai.ServerConfigStore
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProviderSettingsScreen(
     providerManager: ProviderManager,
@@ -49,19 +51,27 @@ fun ProviderSettingsScreen(
 ) {
 
     var provider by remember {
-        mutableStateOf(providerManager.getProvider())
+        mutableStateOf(
+            providerManager.getProvider()
+        )
     }
 
     var apiKey by remember {
-        mutableStateOf(apiKeyStore.getApiKey(provider))
+        mutableStateOf(
+            apiKeyStore.getApiKey(provider)
+        )
     }
 
     var serverUrl by remember {
-        mutableStateOf(serverConfigStore.getServerUrl(provider))
+        mutableStateOf(
+            serverConfigStore.getServerUrl(provider)
+        )
     }
 
     var model by remember {
-        mutableStateOf(providerManager.getModel())
+        mutableStateOf(
+            providerManager.getModel()
+        )
     }
 
     var status by remember {
@@ -78,30 +88,37 @@ fun ProviderSettingsScreen(
 
         apiKey = apiKeyStore.getApiKey(provider)
 
-        serverUrl = serverConfigStore.getServerUrl(provider)
+        serverUrl =
+            serverConfigStore.getServerUrl(provider)
 
-        val savedModel = providerManager.getModel()
+        val savedModel =
+            providerManager.getModel()
 
-        model = if (savedModel.isNotBlank()) {
-            savedModel
-        } else {
-            ModelCatalog
-                .defaultModels(provider)
-                .firstOrNull()
-                ?: ""
-        }
+        model =
+            if (savedModel.isNotBlank()) {
+                savedModel
+            } else {
+                ModelCatalog
+                    .defaultModels(provider)
+                    .firstOrNull()
+                    ?: ""
+            }
     }
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(
+                rememberScrollState()
+            )
             .padding(16.dp)
     ) {
 
         TopAppBar(
             title = {
-                Text("CHINTU AI Settings")
+                Text(
+                    text = "CHINTU AI Settings"
+                )
             },
             navigationIcon = {
                 IconButton(
@@ -130,7 +147,8 @@ fun ProviderSettingsScreen(
             modifier = Modifier.height(16.dp)
         )
 
-        val providerInfo = ProviderCatalog.find(provider)
+        val providerInfo =
+            ProviderCatalog.find(provider)
 
         if (providerInfo?.requiresApiKey == true) {
 
@@ -196,7 +214,8 @@ fun ProviderSettingsScreen(
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement =
+                Arrangement.spacedBy(10.dp)
         ) {
 
             Button(
@@ -208,7 +227,8 @@ fun ProviderSettingsScreen(
                     scope.launch {
 
                         val result =
-                            ConnectionTester().test(serverUrl)
+                            ConnectionTester()
+                                .test(serverUrl)
 
                         testing = false
                         status = result.message
@@ -238,6 +258,7 @@ fun ProviderSettingsScreen(
                     )
 
                     if (apiKey.isNotBlank()) {
+
                         apiKeyStore.saveApiKey(
                             provider = provider,
                             apiKey = apiKey
@@ -261,7 +282,8 @@ fun ProviderSettingsScreen(
                         )
                     }
 
-                    status = "Settings saved successfully."
+                    status =
+                        "Settings saved successfully."
                 },
                 modifier = Modifier.weight(1f)
             ) {
@@ -271,7 +293,9 @@ fun ProviderSettingsScreen(
                     contentDescription = null
                 )
 
-                Text(" Save")
+                Text(
+                    text = " Save"
+                )
             }
         }
 
