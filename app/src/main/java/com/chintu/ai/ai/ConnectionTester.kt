@@ -16,48 +16,117 @@ class ConnectionTester {
     suspend fun test(
         serverUrl: String,
         apiKey: String = ""
-    ): ConnectionResult = withContext(Dispatchers.IO) {
+    ): ConnectionResult {
 
-        val cleanUrl = serverUrl
-            .trim()
-            .removeSuffix("/")
+        return withContext(Dispatchers.IO) {
 
-        if (cleanUrl.isBlank()) {
-            return@withContext ConnectionResult(
-                success = false,
-                message = "Server URL is empty."
-            )
+            val cleanUrl = serverUrl
+                .trim()
+                .removeSuffix("/")
+
+            if (cleanUrl.isBlank()) {
+                return@withContext ConnectionResult(
+                    success = false,
+                    message = "Server URL is empty."
+                )
+            }
+
+            val testUrl = when {
+                cleanUrl.contains("openrouter.ai") ->
+                    "$cleanUrl/models"
+
+                cleanUrl.contains("127.0.0.1:11434") ->
+                    "$cleanUrl/api/tags"
+
+                cleanUrl.contains("localhost:11434") ->
+                    "$cleanUrl/api/tags"
+
+                cleanUrl.endsWith("/models") ->
+                    cleanUrl
+
+                cleanUrl.endsWith("/api/tags") ->
+                    cleanUrl
+
+                else ->
+                    cleanUrl
+            }
+
+            try {
+
+                val connection =
+                    URL(testUrl).openConnection() as HttpURLConnection
+
+                connection.requestMethod = "GET"
+                connection.connectTimeout = 10000
+                connection.readTimeout = 10000
+                connection.instanceFollowRedirects = true
+
+                if (apiKey.isNotBlank()) {
+                    connection.setRequestProperty(
+                        "Authorization",
+                        "Bearer $apiKey"
+                    )
+                }
+
+                connection.setRequestProperty(
+                    "Accept",
+                    "application/json"
+                )
+
+                val status = connection.responseCode
+
+                val responseText = try {
+
+                    val stream =
+                        if (status in 200..299) {
+                            connection.inputStream
+                        } else {
+                            connection.errorStream
+                        }
+
+                    if (stream != null) {
+                        stream.bufferedReader().use {
+                            it.readText()
+                        }
+                    } else {
+                        ""
+                    }
+
+                } catch (_: Exception) {
+                    ""
+                }
+
+                connection.disconnect()
+
+                if (status in 200..299) {
+
+                    ConnectionResult(
+                        success = true,
+                        message = "Connection successful.",
+                        statusCode = status
+                    )
+
+                } else {
+
+                    ConnectionResult(
+                        success = false,
+                        message = if (responseText.isNotBlank()) {
+                            "Server returned HTTP $status: $responseText"
+                        } else {
+                            "Server returned HTTP $status."
+                        },
+                        statusCode = status
+                    )
+                }
+
+            } catch (e: Exception) {
+
+                ConnectionResult(
+                    success = false,
+                    message = e.message
+                        ?: "Unable to connect to server."
+                )
+            }
         }
-
-        val testUrl = when {
-            cleanUrl.contains("openrouter.ai") ->
-                "$cleanUrl/models"
-
-            cleanUrl.contains("127.0.0.1:11434") ->
-                "$cleanUrl/api/tags"
-
-            cleanUrl.contains("localhost:11434") ->
-                "$cleanUrl/api/tags"
-
-            cleanUrl.endsWith("/models") ->
-                cleanUrl
-
-            cleanUrl.endsWith("/api/tags") ->
-                cleanUrl
-
-            else ->
-                cleanUrl
-        }
-
-        try {
-            val connection =
-                URL(testUrl).openConnection() as HttpURLConnection
-
-            connection.requestMethod = "GET"
-
-            connection.connectTimeout = 10000
-            connection.readTimeout = 10000
-
-            connection.instanceFollowRedirects = true
-
-            if (
+    }
+}
