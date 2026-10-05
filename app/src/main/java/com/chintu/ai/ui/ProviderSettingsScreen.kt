@@ -86,7 +86,8 @@ fun ProviderSettingsScreen(
 
     LaunchedEffect(provider) {
 
-        apiKey = apiKeyStore.getApiKey(provider)
+        apiKey =
+            apiKeyStore.getApiKey(provider)
 
         serverUrl =
             serverConfigStore.getServerUrl(provider)
@@ -115,15 +116,19 @@ fun ProviderSettingsScreen(
     ) {
 
         TopAppBar(
+
             title = {
                 Text(
-                    text = "CHINTU AI Settings"
+                    "CHINTU AI Settings"
                 )
             },
+
             navigationIcon = {
+
                 IconButton(
                     onClick = onBack
                 ) {
+
                     Icon(
                         imageVector = Icons.Default.ArrowBack,
                         contentDescription = "Back"
@@ -138,6 +143,7 @@ fun ProviderSettingsScreen(
 
         ProviderSelector(
             selectedProvider = provider,
+
             onProviderSelected = {
                 provider = it
             }
@@ -153,22 +159,30 @@ fun ProviderSettingsScreen(
         if (providerInfo?.requiresApiKey == true) {
 
             OutlinedTextField(
+
                 value = apiKey,
+
                 onValueChange = {
                     apiKey = it
                 },
+
                 modifier = Modifier.fillMaxWidth(),
+
                 label = {
                     Text("API Key")
                 },
+
                 leadingIcon = {
+
                     Icon(
                         imageVector = Icons.Default.Key,
                         contentDescription = null
                     )
                 },
+
                 visualTransformation =
                     PasswordVisualTransformation(),
+
                 singleLine = true
             )
 
@@ -178,20 +192,27 @@ fun ProviderSettingsScreen(
         }
 
         OutlinedTextField(
+
             value = serverUrl,
+
             onValueChange = {
                 serverUrl = it
             },
+
             modifier = Modifier.fillMaxWidth(),
+
             label = {
                 Text("Server URL")
             },
+
             leadingIcon = {
+
                 Icon(
                     imageVector = Icons.Default.Language,
                     contentDescription = null
                 )
             },
+
             singleLine = true
         )
 
@@ -200,9 +221,13 @@ fun ProviderSettingsScreen(
         )
 
         ModelSelector(
+
             provider = provider,
+
             selectedModel = model,
+
             modelManager = modelManager,
+
             onModelSelected = {
                 model = it
             }
@@ -213,68 +238,83 @@ fun ProviderSettingsScreen(
         )
 
         Row(
+
             modifier = Modifier.fillMaxWidth(),
+
             horizontalArrangement =
                 Arrangement.spacedBy(10.dp)
+
         ) {
 
             Button(
+
                 onClick = {
 
                     testing = true
-                    status = "Testing connection..."
+
+                    status =
+                        "Testing connection..."
 
                     scope.launch {
 
                         val result =
-                            ConnectionTester()
-                                .test(serverUrl)
+                            ConnectionTester().test(
+                                serverUrl = serverUrl,
+                                apiKey = apiKey
+                            )
 
                         testing = false
-                        status = result.message
+
+                        status =
+                            result.message
                     }
                 },
+
                 enabled = !testing,
-                modifier = Modifier.weight(1f)
+
+                modifier =
+                    Modifier.weight(1f)
+
             ) {
 
                 Text(
-                    text = if (testing) {
+                    if (testing) {
                         "Testing..."
                     } else {
                         "Test Connection"
                     }
-                )
+                }
             }
 
             Button(
+
                 onClick = {
 
                     providerManager.saveSettings(
-                        provider = provider,
-                        apiKey = apiKey,
-                        serverUrl = serverUrl,
-                        model = model
+                        provider,
+                        apiKey,
+                        serverUrl,
+                        model
                     )
 
                     if (apiKey.isNotBlank()) {
 
                         apiKeyStore.saveApiKey(
-                            provider = provider,
-                            apiKey = apiKey
+                            provider,
+                            apiKey
                         )
                     }
 
                     serverConfigStore.saveServerUrl(
-                        provider = provider,
-                        url = serverUrl
+                        provider,
+                        serverUrl
                     )
 
                     if (model.isNotBlank()) {
 
                         modelManager.addModel(
-                            name = model,
-                            provider = provider
+                            model,
+                            provider
                         )
 
                         modelManager.selectModel(
@@ -285,7 +325,10 @@ fun ProviderSettingsScreen(
                     status =
                         "Settings saved successfully."
                 },
-                modifier = Modifier.weight(1f)
+
+                modifier =
+                    Modifier.weight(1f)
+
             ) {
 
                 Icon(
@@ -293,9 +336,7 @@ fun ProviderSettingsScreen(
                     contentDescription = null
                 )
 
-                Text(
-                    text = " Save"
-                )
+                Text(" Save")
             }
         }
 
@@ -310,4 +351,4 @@ fun ProviderSettingsScreen(
             )
         }
     }
-}
+                    }
