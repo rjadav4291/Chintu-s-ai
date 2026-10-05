@@ -4,8 +4,8 @@ import android.Manifest
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -30,7 +31,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock
@@ -62,7 +62,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -71,7 +70,6 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
-import com.chintu.ai.agent.Orchestrator
 import com.chintu.ai.ai.AiMode
 import com.chintu.ai.ai.AnthropicProvider
 import com.chintu.ai.ai.ChatMessage
@@ -79,6 +77,7 @@ import com.chintu.ai.ai.GeminiProvider
 import com.chintu.ai.ai.OpenAiCompatibleProvider
 import com.chintu.ai.ai.ProviderRegistry
 import com.chintu.ai.ai.SecureConfig
+import com.chintu.ai.agent.Orchestrator
 import com.chintu.ai.memory.MemoryStore
 import com.chintu.ai.voice.VoiceEngine
 import kotlinx.coroutines.launch
@@ -205,13 +204,13 @@ fun ChintuApp(activity: MainActivity) {
             SettingsScreen(
                 cfg = cfg,
                 model = model,
-                onModelChange = {
-                    model = it
-                    cfg.set("model", it)
+                onModelChange = { value ->
+                    model = value
+                    cfg.set("model", value)
                 },
                 mode = mode,
-                onModeChange = {
-                    mode = it
+                onModeChange = { selectedMode ->
+                    mode = selectedMode
                 },
                 memory = memory,
                 onBack = {
@@ -223,10 +222,13 @@ fun ChintuApp(activity: MainActivity) {
 
             Scaffold(
                 containerColor = Color.Transparent,
+
                 topBar = {
 
                     TopAppBar(
+
                         title = {
+
                             Column {
 
                                 Text(
@@ -301,9 +303,11 @@ fun ChintuApp(activity: MainActivity) {
                     InputBar(
                         input = input,
                         status = status,
-                        onInputChange = {
-                            input = it
+
+                        onInputChange = { value ->
+                            input = value
                         },
+
                         onVoice = {
 
                             microphonePermission.launch(
@@ -311,14 +315,15 @@ fun ChintuApp(activity: MainActivity) {
                             )
 
                             voice.listen(
-                                {
-                                    input = it
+                                { spokenText ->
+                                    input = spokenText
                                 },
-                                {
-                                    status = it
+                                { voiceStatus ->
+                                    status = voiceStatus
                                 }
                             )
                         },
+
                         onSend = {
 
                             val question = input.trim()
@@ -342,8 +347,8 @@ fun ChintuApp(activity: MainActivity) {
                                             question,
                                             mode,
                                             model
-                                        ) {
-                                            status = it
+                                        ) { newStatus ->
+                                            status = newStatus
                                         }
 
                                     messages.add(
@@ -365,14 +370,14 @@ fun ChintuApp(activity: MainActivity) {
                     )
                 }
 
-            ) { padding ->
+            ) { paddingValues ->
 
                 HomeContent(
-                    padding = padding,
+                    padding = paddingValues,
                     status = status,
                     messages = messages,
-                    onQuickAction = {
-                        input = it
+                    onQuickAction = { action ->
+                        input = action
                     }
                 )
             }
@@ -413,19 +418,24 @@ private fun HomeContent(
                     .weight(1f)
                     .fillMaxWidth()
                     .padding(horizontal = 14.dp),
+
                 reverseLayout = true,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(
-                    top = 12.dp,
-                    bottom = 12.dp
-                )
+
+                verticalArrangement =
+                    Arrangement.spacedBy(8.dp),
+
+                contentPadding =
+                    PaddingValues(
+                        top = 12.dp,
+                        bottom = 12.dp
+                    )
             ) {
 
-                items(messages.reversed()) { message ->
+                items(
+                    messages.reversed()
+                ) { message ->
 
-                    MessageBubble(
-                        message = message
-                    )
+                    MessageBubble(message)
                 }
             }
         }
@@ -447,8 +457,12 @@ private fun WelcomeContent(
         modifier = Modifier
             .weight(1f)
             .fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+
+        horizontalAlignment =
+            Alignment.CenterHorizontally,
+
+        verticalArrangement =
+            Arrangement.Center
     ) {
 
         ChintuOrb(status)
@@ -505,9 +519,6 @@ private fun ChintuOrb(
         status.contains("THINK", true) ||
         status.contains("LISTEN", true)
 
-    val scale =
-        if (active) 1.06f else 1f
-
     Box(
         modifier = Modifier.size(190.dp),
         contentAlignment = Alignment.Center
@@ -516,8 +527,13 @@ private fun ChintuOrb(
         Box(
             modifier = Modifier
                 .size(180.dp)
-                .scale(scale)
-                .alpha(0.16f)
+                .alpha(
+                    if (active) {
+                        0.25f
+                    } else {
+                        0.15f
+                    }
+                )
                 .background(
                     Brush.radialGradient(
                         listOf(
@@ -542,8 +558,10 @@ private fun ChintuOrb(
 
             Column(
                 modifier = Modifier.fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+                horizontalAlignment =
+                    Alignment.CenterHorizontally,
+                verticalArrangement =
+                    Arrangement.Center
             ) {
 
                 Icon(
@@ -579,7 +597,9 @@ private fun QuickActions(
                 horizontal = 12.dp,
                 vertical = 6.dp
             ),
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
+
+        horizontalArrangement =
+            Arrangement.spacedBy(6.dp)
     ) {
 
         QuickActionChip(
@@ -623,8 +643,11 @@ private fun QuickActionChip(
         modifier = modifier.clickable {
             onClick()
         },
+
         shape = RoundedCornerShape(14.dp),
+
         color = ChintuCard,
+
         border = BorderStroke(
             1.dp,
             Color.White.copy(alpha = 0.06f)
@@ -636,8 +659,12 @@ private fun QuickActionChip(
                 horizontal = 8.dp,
                 vertical = 9.dp
             ),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
+
+            horizontalArrangement =
+                Arrangement.Center,
+
+            verticalAlignment =
+                Alignment.CenterVertically
         ) {
 
             Icon(
@@ -676,22 +703,9 @@ private fun InputBar(
                 horizontal = 12.dp,
                 vertical = 6.dp
             ),
+
         shape = RoundedCornerShape(25.dp),
+
         color = ChintuCard2,
-        border = BorderStroke(
-            1.dp,
-            Color.White.copy(alpha = 0.08f)
-        )
-    ) {
 
-        Row(
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-
-            IconButton(
-                onClick = onVoice
-            ) {
-
-                Icon(
-                    imageVector =
-                        if (status.c
+        border = Bor
