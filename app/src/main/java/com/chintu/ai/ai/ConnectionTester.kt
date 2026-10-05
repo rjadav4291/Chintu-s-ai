@@ -14,7 +14,8 @@ data class ConnectionResult(
 class ConnectionTester {
 
     suspend fun test(
-        serverUrl: String
+        serverUrl: String,
+        apiKey: String = ""
     ): ConnectionResult = withContext(Dispatchers.IO) {
 
         val cleanUrl = serverUrl
@@ -28,46 +29,35 @@ class ConnectionTester {
             )
         }
 
+        val testUrl = when {
+            cleanUrl.contains("openrouter.ai") ->
+                "$cleanUrl/models"
+
+            cleanUrl.contains("127.0.0.1:11434") ->
+                "$cleanUrl/api/tags"
+
+            cleanUrl.contains("localhost:11434") ->
+                "$cleanUrl/api/tags"
+
+            cleanUrl.endsWith("/models") ->
+                cleanUrl
+
+            cleanUrl.endsWith("/api/tags") ->
+                cleanUrl
+
+            else ->
+                cleanUrl
+        }
+
         try {
-
-            val url = URL(cleanUrl)
-
             val connection =
-                url.openConnection() as HttpURLConnection
+                URL(testUrl).openConnection() as HttpURLConnection
 
             connection.requestMethod = "GET"
-            connection.connectTimeout = 7000
-            connection.readTimeout = 7000
+
+            connection.connectTimeout = 10000
+            connection.readTimeout = 10000
+
             connection.instanceFollowRedirects = true
 
-            val status = connection.responseCode
-
-            connection.disconnect()
-
-            if (status in 200..399) {
-
-                ConnectionResult(
-                    success = true,
-                    message = "Server is reachable.",
-                    statusCode = status
-                )
-
-            } else {
-
-                ConnectionResult(
-                    success = false,
-                    message = "Server returned HTTP $status.",
-                    statusCode = status
-                )
-            }
-
-        } catch (exception: Exception) {
-
-            ConnectionResult(
-                success = false,
-                message = exception.message
-                    ?: "Unable to connect to server."
-            )
-        }
-    }
-}
+            if (
