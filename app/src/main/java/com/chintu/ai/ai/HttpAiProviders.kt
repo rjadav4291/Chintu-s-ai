@@ -2,127 +2,147 @@ package com.chintu.ai.ai
 
 import android.content.Context
 import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKeys
+import androidx.security.crypto.MasterKey
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
-class SecureConfig(
-    context: Context
-) {
+class SecureConfig(context: Context) {
+
+    private val masterKey =
+        MasterKey.Builder(context)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
 
     private val prefs =
         EncryptedSharedPreferences.create(
-            "chintu_secrets",
-            MasterKeys.getOrCreate(
-                MasterKeys.AES256_GCM_SPEC
-            ),
             context,
-            EncryptedSharedPreferences
-                .PrefKeyEncryptionScheme
-                .AES256_SIV,
-            EncryptedSharedPreferences
-                .PrefValueEncryptionScheme
-                .AES256_GCM
+            "chintu_secure_config",
+            masterKey,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
         )
 
-    fun get(
-        key: String
-    ): String =
-        prefs.getString(
-            key,
-            ""
-        ) ?: ""
+    fun get(key: String): String {
+        return prefs.getString(key, "") ?: ""
+    }
 
     fun set(
         key: String,
         value: String
     ) {
-
         prefs.edit()
-            .putString(
-                key,
-                value
-            )
+            .putString(key, value)
             .apply()
     }
 
-    fun clear(
-        key: String
-    ) {
-
+    fun clear(key: String) {
         prefs.edit()
             .remove(key)
             .apply()
     }
 }
 
-private fun postJson(
+/*
+ * IMPORTANT:
+ * Network request always runs on IO thread.
+ */
+private suspend fun postJson(
     endpoint: String,
     headers: Map<String, String>,
     body: JSONObject
-): JSONObject {
+): JSONObject = withContext(Dispatchers.IO) {
 
-    val c =
-        URL(endpoint)
-            .openConnection() as HttpURLConnection
+    val connection =
+        URL(endpoint).openConnection() as HttpURLConnection
 
-    c.requestMethod = "POST"
+    try {
 
-    c.connectTimeout =
-        TimeUnit.SECONDS
-            .toMillis(15)
-            .toInt()
+        connection.requestMethod = "POST"
 
-    c.readTimeout =
-        TimeUnit.SECONDS
-            .toMillis(90)
-            .toInt()
+        connection.connectTimeout =
+            TimeUnit.SECONDS.toMillis(15).toInt()
 
-    c.doOutput = true
+        connection.readTimeout =
+            TimeUnit.SECONDS.toMillis(90).toInt()
 
-    c.setRequestProperty(
-        "Content-Type",
-        "application/json"
-    )
+        connection.doOutput = true
 
-    headers.forEach {
-        (k, v) ->
-        c.setRequestProperty(
-            k,
-            v
+        connection.useCaches = false
+
+        connection.setRequestProperty(
+            "Content-Type",
+            "application/json"
         )
-    }
 
-    c.outputStream.use {
-        it.write(
-            body.toString()
-                .toByteArray()
+        connection.setRequestProperty(
+            "Accept",
+            "application/json"
         )
+
+        headers.forEach { (key, value) ->
+            connection.setRequestProperty(
+                key,
+                value
+            )
+        }
+
+        val requestBody =
+            body.toString().toByteArray(Charsets.UTF_8)
+
+        connection.outputStream.use { output ->
+            output.write(requestBody)
+            output.flush()
+        }
+
+        val status =
+            connection.responseCode
+
+        val stream =
+            if (status in 200..299) {
+                connection.inputStream
+            } else {
+                connection.errorStream
+            }
+
+        val responseText =
+            stream
+                ?.bufferedReader()
+                ?.use { it.readText() }
+                ?: ""
+
+        if (status !in 200..299) {
+
+            throw IllegalStateException(
+                "HTTP $status: ${
+                    if (responseText.isBlank()) {
+                        "Empty error response"
+                    } else {
+                        responseText
+                    }
+                }"
+            )
+        }
+
+        if (responseText.isBlank()) {
+            throw IllegalStateException(
+                "Provider returned an empty response."
+            )
+        }
+
+        JSONObject(responseText)
+
+    } finally {
+
+        connection.disconnect()
     }
-
-    val stream =
-        if (c.responseCode in 200..299)
-            c.inputStream
-        else
-            c.errorStream
-
-    val text =
-        stream
-            ?.bufferedReader()
-            ?.readText()
-            ?: ""
-
-    if (c.responseCode !in 200..299) {
-        error(
-            "HTTP ${c.responseCode}: $text"
-        )
-    }
-
-    return JSONObject(text)
 }
+
 
 class OpenAiCompatibleProvider(
     private val cfg: SecureConfig,
@@ -131,9 +151,12 @@ class OpenAiCompatibleProvider(
     private val defaultEndpoint: String
 ) : AiProvider {
 
-    override suspend fun isAvailable() =
-        cfg.get("${id}_api_key").isNotBlank()
-            || id == "ollama"
+    override suspend fun isAvailable(): Boolean {
+
+        return cfg
+            .get("${id}_api_key")
+            .isNotBlank() || id == "ollama"
+    }
 
     override suspend fun generate(
         request: AiRequest
@@ -145,37 +168,32 @@ class OpenAiCompatibleProvider(
                     defaultEndpoint
                 }
 
-        val key =
-            cfg.get(
-                "${id}_api_key"
-            )
+        val apiKey =
+            cfg.get("${id}_api_key")
 
-        val msgs =
+        val messages =
             JSONArray().apply {
 
                 put(
                     JSONObject()
-                        .put(
-                            "role",
-                            "system"
-                        )
+                        .put("role", "system")
                         .put(
                             "content",
                             request.systemPrompt
                         )
                 )
 
-                request.messages.forEach {
+                request.messages.forEach { message ->
 
                     put(
                         JSONObject()
                             .put(
                                 "role",
-                                it.role
+                                message.role
                             )
                             .put(
                                 "content",
-                                it.content
+                                message.content
                             )
                     )
                 }
@@ -189,95 +207,103 @@ class OpenAiCompatibleProvider(
                 )
                 .put(
                     "messages",
-                    msgs
+                    messages
                 )
 
         val headers =
-            if (key.isBlank())
+            if (apiKey.isBlank()) {
+
                 emptyMap()
-            else
+
+            } else {
+
                 mapOf(
                     "Authorization" to
-                        "Bearer $key"
+                        "Bearer $apiKey"
                 )
+            }
 
         val json =
             postJson(
-                endpoint,
-                headers,
-                body
+                endpoint = endpoint,
+                headers = headers,
+                body = body
             )
 
         val text =
-            json.optJSONArray("choices")
+            json
+                .optJSONArray("choices")
                 ?.optJSONObject(0)
                 ?.optJSONObject("message")
                 ?.optString("content")
-
+                ?.takeIf {
+                    it.isNotBlank()
+                }
                 ?: json
                     .optJSONObject("message")
                     ?.optString("content")
                     ?.takeIf {
                         it.isNotBlank()
                     }
-
                 ?: json
                     .optString("response")
                     .takeIf {
                         it.isNotBlank()
                     }
-
-                ?: error(
-                    "Provider returned no assistant text"
+                ?: throw IllegalStateException(
+                    "Provider returned no assistant text. Response: $json"
                 )
 
         return AiResponse(
-            text,
-            displayName,
-            request.model
+            text = text,
+            provider = displayName,
+            model = request.model,
+            verified = true
         )
     }
 }
+
 
 class AnthropicProvider(
     private val cfg: SecureConfig
 ) : AiProvider {
 
-    override val id =
-        "anthropic"
+    override val id = "anthropic"
 
-    override val displayName =
-        "Anthropic"
+    override val displayName = "Anthropic"
 
-    override suspend fun isAvailable() =
-        cfg.get(
-            "anthropic_api_key"
-        ).isNotBlank()
+    override suspend fun isAvailable(): Boolean {
+
+        return cfg
+            .get("anthropic_api_key")
+            .isNotBlank()
+    }
 
     override suspend fun generate(
         request: AiRequest
     ): AiResponse {
 
-        val msgs =
-            JSONArray()
+        val messages =
+            JSONArray().apply {
 
-        request.messages
-            .filter {
-                it.role != "system"
-            }
-            .forEach {
+                request.messages
+                    .filter {
+                        it.role != "system"
+                    }
+                    .forEach { message ->
 
-                msgs.put(
-                    JSONObject()
-                        .put(
-                            "role",
-                            it.role
+                        put(
+                            JSONObject()
+                                .put(
+                                    "role",
+                                    message.role
+                                )
+                                .put(
+                                    "content",
+                                    message.content
+                                )
                         )
-                        .put(
-                            "content",
-                            it.content
-                        )
-                )
+                    }
             }
 
         val body =
@@ -296,26 +322,29 @@ class AnthropicProvider(
                 )
                 .put(
                     "messages",
-                    msgs
+                    messages
                 )
+
+        val endpoint =
+            cfg.get("anthropic_endpoint")
+                .ifBlank {
+                    "https://api.anthropic.com/v1/messages"
+                }
+
+        val apiKey =
+            cfg.get("anthropic_api_key")
+
+        val headers =
+            mapOf(
+                "x-api-key" to apiKey,
+                "anthropic-version" to "2023-06-01"
+            )
 
         val json =
             postJson(
-                cfg.get(
-                    "anthropic_endpoint"
-                ).ifBlank {
-                    "https://api.anthropic.com/v1/messages"
-                },
-                mapOf(
-                    "x-api-key" to
-                        cfg.get(
-                            "anthropic_api_key"
-                        ),
-
-                    "anthropic-version" to
-                        "2023-06-01"
-                ),
-                body
+                endpoint = endpoint,
+                headers = headers,
+                body = body
             )
 
         val text =
@@ -323,68 +352,73 @@ class AnthropicProvider(
                 .optJSONArray("content")
                 ?.optJSONObject(0)
                 ?.optString("text")
-                ?: error(
-                    "Provider returned no text"
+                ?.takeIf {
+                    it.isNotBlank()
+                }
+                ?: throw IllegalStateException(
+                    "Anthropic returned no text."
                 )
 
         return AiResponse(
-            text,
-            displayName,
-            request.model
+            text = text,
+            provider = displayName,
+            model = request.model,
+            verified = true
         )
     }
 }
+
 
 class GeminiProvider(
     private val cfg: SecureConfig
 ) : AiProvider {
 
-    override val id =
-        "gemini"
+    override val id = "gemini"
 
-    override val displayName =
-        "Gemini"
+    override val displayName = "Gemini"
 
-    override suspend fun isAvailable() =
-        cfg.get(
-            "gemini_api_key"
-        ).isNotBlank()
+    override suspend fun isAvailable(): Boolean {
+
+        return cfg
+            .get("gemini_api_key")
+            .isNotBlank()
+    }
 
     override suspend fun generate(
         request: AiRequest
     ): AiResponse {
 
         val contents =
-            JSONArray()
+            JSONArray().apply {
 
-        request.messages.forEach {
+                request.messages.forEach { message ->
 
-            contents.put(
-
-                JSONObject()
-                    .put(
-                        "role",
-                        if (
-                            it.role ==
-                            "assistant"
-                        )
-                            "model"
-                        else
-                            "user"
-                    )
-                    .put(
-                        "parts",
-                        JSONArray()
+                    put(
+                        JSONObject()
                             .put(
-                                JSONObject()
-                                    .put(
-                                        "text",
-                                        it.content
-                                    )
+                                "role",
+                                if (
+                                    message.role ==
+                                    "assistant"
+                                ) {
+                                    "model"
+                                } else {
+                                    "user"
+                                }
+                            )
+                            .put(
+                                "parts",
+                                JSONArray().put(
+                                    JSONObject()
+                                        .put(
+                                            "text",
+                                            message.content
+                                        )
+                                )
                             )
                     )
-            )
-        }
+                }
+            }
 
         val body =
             JSONObject()
@@ -393,14 +427,13 @@ class GeminiProvider(
                     JSONObject()
                         .put(
                             "parts",
-                            JSONArray()
-                                .put(
-                                    JSONObject()
-                                        .put(
-                                            "text",
-                                            request.systemPrompt
-                                        )
-                                )
+                            JSONArray().put(
+                                JSONObject()
+                                    .put(
+                                        "text",
+                                        request.systemPrompt
+                                    )
+                            )
                         )
                 )
                 .put(
@@ -408,29 +441,43 @@ class GeminiProvider(
                     contents
                 )
 
-        val endpoint =
-            cfg.get(
-                "gemini_endpoint"
-            ).ifBlank {
+        val baseEndpoint =
+            cfg.get("gemini_endpoint")
+                .ifBlank {
+                    "https://generativelanguage.googleapis.com"
+                }
 
-                "https://generativelanguage.googleapis.com/" +
-                    "v1beta/models/${request.model}:generateContent"
+        val cleanEndpoint =
+            baseEndpoint
+                .removeSuffix("/")
+
+        val endpoint =
+            if (
+                cleanEndpoint.contains(
+                    "/generateContent"
+                )
+            ) {
+                cleanEndpoint
+            } else {
+                "$cleanEndpoint/v1beta/models/${request.model}:generateContent"
             }
 
+        val apiKey =
+            cfg.get("gemini_api_key")
+
         val url =
-            "$endpoint?key=" +
-                java.net.URLEncoder.encode(
-                    cfg.get(
-                        "gemini_api_key"
-                    ),
+            "$endpoint?key=${
+                URLEncoder.encode(
+                    apiKey,
                     "UTF-8"
                 )
+            }"
 
         val json =
             postJson(
-                url,
-                emptyMap(),
-                body
+                endpoint = url,
+                headers = emptyMap(),
+                body = body
             )
 
         val text =
@@ -441,14 +488,18 @@ class GeminiProvider(
                 ?.optJSONArray("parts")
                 ?.optJSONObject(0)
                 ?.optString("text")
-                ?: error(
-                    "Provider returned no text"
+                ?.takeIf {
+                    it.isNotBlank()
+                }
+                ?: throw IllegalStateException(
+                    "Gemini returned no text."
                 )
 
         return AiResponse(
-            text,
-            displayName,
-            request.model
+            text = text,
+            provider = displayName,
+            model = request.model,
+            verified = true
         )
     }
 }
