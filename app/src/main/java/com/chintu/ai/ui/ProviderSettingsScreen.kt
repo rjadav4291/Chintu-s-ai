@@ -14,9 +14,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -27,10 +25,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import com.chintu.ai.ai.ApiKeyStore
 import com.chintu.ai.ai.ConnectionTester
 import com.chintu.ai.ai.ModelCatalog
 import com.chintu.ai.ai.ModelManager
@@ -38,39 +38,30 @@ import com.chintu.ai.ai.ProviderCatalog
 import com.chintu.ai.ai.ProviderManager
 import com.chintu.ai.ai.ServerConfigStore
 import kotlinx.coroutines.launch
-import androidx.compose.runtime.rememberCoroutineScope
 
 @Composable
 fun ProviderSettingsScreen(
     providerManager: ProviderManager,
     modelManager: ModelManager,
     serverConfigStore: ServerConfigStore,
-    apiKeyStore: com.chintu.ai.ai.ApiKeyStore,
+    apiKeyStore: ApiKeyStore,
     onBack: () -> Unit
 ) {
 
     var provider by remember {
-        mutableStateOf(
-            providerManager.getProvider()
-        )
+        mutableStateOf(providerManager.getProvider())
     }
 
     var apiKey by remember {
-        mutableStateOf(
-            apiKeyStore.getApiKey(provider)
-        )
+        mutableStateOf(apiKeyStore.getApiKey(provider))
     }
 
     var serverUrl by remember {
-        mutableStateOf(
-            serverConfigStore.getServerUrl(provider)
-        )
+        mutableStateOf(serverConfigStore.getServerUrl(provider))
     }
 
     var model by remember {
-        mutableStateOf(
-            providerManager.getModel()
-        )
+        mutableStateOf(providerManager.getModel())
     }
 
     var status by remember {
@@ -87,29 +78,24 @@ fun ProviderSettingsScreen(
 
         apiKey = apiKeyStore.getApiKey(provider)
 
-        serverUrl =
-            serverConfigStore.getServerUrl(provider)
+        serverUrl = serverConfigStore.getServerUrl(provider)
 
-        val savedModel =
-            providerManager.getModel()
+        val savedModel = providerManager.getModel()
 
-        model =
-            if (savedModel.isNotBlank()) {
-                savedModel
-            } else {
-                ModelCatalog
-                    .defaultModels(provider)
-                    .firstOrNull()
-                    ?: ""
-            }
+        model = if (savedModel.isNotBlank()) {
+            savedModel
+        } else {
+            ModelCatalog
+                .defaultModels(provider)
+                .firstOrNull()
+                ?: ""
+        }
     }
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .verticalScroll(
-                rememberScrollState()
-            )
+            .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
 
@@ -122,7 +108,7 @@ fun ProviderSettingsScreen(
                     onClick = onBack
                 ) {
                     Icon(
-                        Icons.Default.ArrowBack,
+                        imageVector = Icons.Default.ArrowBack,
                         contentDescription = "Back"
                     )
                 }
@@ -144,10 +130,9 @@ fun ProviderSettingsScreen(
             modifier = Modifier.height(16.dp)
         )
 
-        val info =
-            ProviderCatalog.find(provider)
+        val providerInfo = ProviderCatalog.find(provider)
 
-        if (info?.requiresApiKey == true) {
+        if (providerInfo?.requiresApiKey == true) {
 
             OutlinedTextField(
                 value = apiKey,
@@ -160,7 +145,7 @@ fun ProviderSettingsScreen(
                 },
                 leadingIcon = {
                     Icon(
-                        Icons.Default.Key,
+                        imageVector = Icons.Default.Key,
                         contentDescription = null
                     )
                 },
@@ -185,7 +170,7 @@ fun ProviderSettingsScreen(
             },
             leadingIcon = {
                 Icon(
-                    Icons.Default.Language,
+                    imageVector = Icons.Default.Language,
                     contentDescription = null
                 )
             },
@@ -211,8 +196,7 @@ fun ProviderSettingsScreen(
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement =
-                Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
 
             Button(
@@ -224,8 +208,7 @@ fun ProviderSettingsScreen(
                     scope.launch {
 
                         val result =
-                            ConnectionTester()
-                                .test(serverUrl)
+                            ConnectionTester().test(serverUrl)
 
                         testing = false
                         status = result.message
@@ -234,13 +217,14 @@ fun ProviderSettingsScreen(
                 enabled = !testing,
                 modifier = Modifier.weight(1f)
             ) {
+
                 Text(
-                    if (testing) {
+                    text = if (testing) {
                         "Testing..."
                     } else {
                         "Test Connection"
                     }
-                }
+                )
             }
 
             Button(
@@ -253,36 +237,38 @@ fun ProviderSettingsScreen(
                         model = model
                     )
 
-                    apiKeyStore.saveApiKey(
-                        provider,
-                        apiKey
-                    )
+                    if (apiKey.isNotBlank()) {
+                        apiKeyStore.saveApiKey(
+                            provider = provider,
+                            apiKey = apiKey
+                        )
+                    }
 
                     serverConfigStore.saveServerUrl(
-                        provider,
-                        serverUrl
+                        provider = provider,
+                        url = serverUrl
                     )
 
-                    modelManager.addModel(
-                        name = model,
-                        provider = provider
-                    )
+                    if (model.isNotBlank()) {
 
-                    modelManager.selectModel(
-                        model
-                    )
+                        modelManager.addModel(
+                            name = model,
+                            provider = provider
+                        )
+
+                        modelManager.selectModel(
+                            model
+                        )
+                    }
 
                     status = "Settings saved successfully."
                 },
                 modifier = Modifier.weight(1f)
             ) {
-                Icon(
-                    Icons.Default.Save,
-                    contentDescription = null
-                )
 
-                Spacer(
-                    modifier = Modifier.height(0.dp)
+                Icon(
+                    imageVector = Icons.Default.Save,
+                    contentDescription = null
                 )
 
                 Text(" Save")
@@ -300,4 +286,4 @@ fun ProviderSettingsScreen(
             )
         }
     }
-                  }
+}
