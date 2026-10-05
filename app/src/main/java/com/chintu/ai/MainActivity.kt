@@ -32,7 +32,6 @@ class MainActivity : ComponentActivity() {
 private fun ChintuRoot(
     activity: MainActivity
 ) {
-
     val config = remember {
         SecureConfig(activity)
     }
@@ -148,15 +147,10 @@ private fun ChintuRoot(
         } else {
 
             HomeScreen(
-
                 mode = mode,
-
                 model = model,
-
                 input = input,
-
                 status = status,
-
                 messages = messages,
 
                 onSettings = {
@@ -178,7 +172,6 @@ private fun ChintuRoot(
                     )
 
                     voice.listen(
-
                         onText = {
                             input = it
                             status = "READY"
@@ -194,45 +187,43 @@ private fun ChintuRoot(
 
                     val question = input.trim()
 
-                    if (question.isEmpty()) {
-                        return@HomeScreen
-                    }
-
-                    messages.add(
-                        ChatMessage(
-                            role = "user",
-                            content = question
-                        )
-                    )
-
-                    input = ""
-
-                    status = "THINKING"
-
-                    activity.lifecycleScope.launch {
-
-                        val result =
-                            orchestrator.answer(
-                                question,
-                                mode,
-                                model
-                            ) {
-                                status = it
-                            }
+                    if (question.isNotEmpty()) {
 
                         messages.add(
                             ChatMessage(
-                                role = "assistant",
-                                content = result.text
+                                role = "user",
+                                content = question
                             )
                         )
 
-                        status =
-                            if (result.verified) {
-                                "✓ COMPLETED"
-                            } else {
-                                "✕ FAILED"
-                            }
+                        input = ""
+                        status = "THINKING"
+
+                        activity.lifecycleScope.launch {
+
+                            val result =
+                                orchestrator.answer(
+                                    question,
+                                    mode,
+                                    model
+                                ) {
+                                    status = it
+                                }
+
+                            messages.add(
+                                ChatMessage(
+                                    role = "assistant",
+                                    content = result.text
+                                )
+                            )
+
+                            status =
+                                if (result.verified) {
+                                    "✓ COMPLETED"
+                                } else {
+                                    "✕ FAILED"
+                                }
+                        }
                     }
                 }
             )
