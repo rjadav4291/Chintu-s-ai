@@ -66,10 +66,6 @@ fun HomeScreen(
                     }
                 },
 
-                navigationIcon = {
-                    OrbLogo()
-                },
-
                 actions = {
                     AssistChip(
                         onClick = {
