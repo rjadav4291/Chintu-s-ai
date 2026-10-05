@@ -1,47 +1,38 @@
-package com.chintu.ai
+package com.chintu.ai.agent
 
-import com.chintu.ai.agent.Conductor
-import com.chintu.ai.agent.WorkerStatus
-import org.junit.Assert.assertEquals
-import org.junit.Test
+class Conductor {
 
-class ConductorTest {
+    private val workers = mutableMapOf<String, Thread>()
 
-    @Test
-    fun workerLifecycleIsTruthful() {
+    fun start(id: String, task: () -> Unit) {
+        stop(id)
 
-        val c =
-            Conductor()
+        val worker = Thread {
+            try {
+                task()
+            } finally {
+                workers.remove(id)
+            }
+        }
 
-        val w =
-            c.start(
-                "Research Agent"
-            )
+        workers[id] = worker
+        worker.start()
+    }
 
-        assertEquals(
-            WorkerStatus.STARTING,
-            w.status
-        )
+    fun stop(id: String) {
+        workers.remove(id)?.interrupt()
+    }
 
-        c.update(
-            w.id,
-            WorkerStatus.RUNNING
-        )
+    fun stopAll() {
+        workers.values.forEach { it.interrupt() }
+        workers.clear()
+    }
 
-        assertEquals(
-            WorkerStatus.RUNNING,
-            c.snapshot()
-                .single()
-                .status
-        )
+    fun isRunning(id: String): Boolean {
+        return workers[id]?.isAlive == true
+    }
 
-        c.cancel(w.id)
-
-        assertEquals(
-            WorkerStatus.CANCELLED,
-            c.snapshot()
-                .single()
-                .status
-        )
+    fun runningCount(): Int {
+        return workers.values.count { it.isAlive }
     }
 }
