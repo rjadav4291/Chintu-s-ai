@@ -1,14 +1,27 @@
 package com.chintu.ai
 
 import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
-import androidx.compose.runtime.*
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
-import com.chintu.ai.ai.*
+import com.chintu.ai.ai.AiMode
+import com.chintu.ai.ai.ApiKeyStore
+import com.chintu.ai.ai.ChatMessage
+import com.chintu.ai.ai.ModelManager
+import com.chintu.ai.ai.ProviderManager
+import com.chintu.ai.ai.ServerConfigStore
+import com.chintu.ai.ai.ChintuAiEngine
 import com.chintu.ai.agent.Orchestrator
 import com.chintu.ai.memory.MemoryStore
 import com.chintu.ai.ui.ChintuTheme
@@ -19,78 +32,77 @@ import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
-    override fun onCreate(savedInstanceState: Bundle?) {
+    override fun onCreate(
+        savedInstanceState: Bundle?
+    ) {
         super.onCreate(savedInstanceState)
 
         setContent {
-            ChintuRoot(this)
+            ChintuApp(this)
         }
     }
 }
 
 @Composable
-private fun ChintuRoot(
+fun ChintuApp(
     activity: MainActivity
 ) {
-    val config = remember {
-        SecureConfig(activity)
-    }
 
-    val memory = remember {
-        MemoryStore(activity)
-    }
+    val memory =
+        remember {
+            MemoryStore(activity)
+        }
 
-    val providers = remember {
-        ProviderRegistry(
-            listOf(
-                OpenAiCompatibleProvider(
-                    config,
-                    "openai",
-                    "OpenAI",
-                    "https://api.openai.com/v1/chat/completions"
-                ),
+    val voice =
+        remember {
+            VoiceEngine(activity)
+        }
 
-                OpenAiCompatibleProvider(
-                    config,
-                    "openrouter",
-                    "OpenRouter",
-                    "https://openrouter.ai/api/v1/chat/completions"
-                ),
+    val providerManager =
+        remember {
+            ProviderManager(activity)
+        }
 
-                OpenAiCompatibleProvider(
-                    config,
-                    "ollama",
-                    "Ollama",
-                    "http://127.0.0.1:11434/api/chat"
-                ),
+    val apiKeyStore =
+        remember {
+            ApiKeyStore(activity)
+        }
 
-                AnthropicProvider(config),
+    val serverConfigStore =
+        remember {
+            ServerConfigStore(activity)
+        }
 
-                GeminiProvider(config)
+    val modelManager =
+        remember {
+            ModelManager(activity)
+        }
+
+    val aiEngine =
+        remember {
+            ChintuAiEngine(activity)
+        }
+
+    val orchestrator =
+        remember {
+            Orchestrator(
+                aiEngine = aiEngine,
+                memory = memory
             )
-        )
-    }
-
-    val orchestrator = remember {
-        Orchestrator(
-            providers,
-            memory
-        )
-    }
-
-    val voice = remember {
-        VoiceEngine(activity)
-    }
+        }
 
     var mode by remember {
-        mutableStateOf(AiMode.AUTO)
+        mutableStateOf(
+            AiMode.AUTO
+        )
     }
 
     var model by remember {
         mutableStateOf(
-            config.get("model").ifBlank {
-                "gpt-6-luna"
-            }
+            providerManager.getModel()
+                .ifBlank {
+                    modelManager.getSelectedModel()
+                }
         )
     }
 
@@ -106,39 +118,149 @@ private fun ChintuRoot(
         mutableStateOf(false)
     }
 
-    val messages = remember {
-        mutableStateListOf<ChatMessage>()
-    }
+    val messages =
+        remember {
+            mutableStateListOf<ChatMessage>()
+        }
 
-    val microphonePermission =
+    val micPermissionLauncher =
         rememberLauncherForActivityResult(
-            ActivityResultContracts.RequestPermission()
-        ) {
-            if (!it) {
-                status = "MIC PERMISSION NEEDED"
+            contract =
+                ActivityResultContracts.RequestPermission()
+        ) { granted ->
+
+            if (granted) {
+
+                status = "LISTENING"
+
+                voice.listen(
+                    onText = {
+                        input = it
+                        status = "READY"
+                    },
+                    onError = {
+                        status = it
+                    }
+                )
+
+            } else {
+
+                status =
+                    "MIC PERMISSION NEEDED"
             }
         }
+
+    fun startVoice() {
+
+        val granted =
+            ContextCompat.checkSelfPermission(
+                activity,
+                Manifest.permission.RECORD_AUDIO
+            ) == PackageManager.PERMISSION_GRANTED
+
+        if (granted) {
+
+            status = "LISTENING"
+
+            voice.listen(
+                onText = {
+                    input = it
+                    status = "READY"
+                },
+                onError = {
+                    status = it
+                }
+            )
+
+        } else {
+
+            micPermissionLauncher.launch(
+                Manifest.permission.RECORD_AUDIO
+            )
+        }
+    }
+
+    fun sendMessage() {
+
+        val question =
+            input.trim()
+
+        if (
+            question.isEmpty() ||
+            status == "THINKING"
+        ) {
+            return
+        }
+
+        messages.add(
+            ChatMessage(
+                role = "user",
+                content = question
+            )
+        )
+
+        input = ""
+        status = "THINKING"
+
+        activity.lifecycleScope.launch {
+
+            val result =
+                orchestrator.answer(
+                    userText = question,
+                    mode = mode,
+                    model = model,
+                    onStatus = {
+                        status = it
+                    }
+                )
+
+            messages.add(
+                ChatMessage(
+                    role = "assistant",
+                    content = result.text
+                )
+            )
+
+            status =
+                if (result.verified) {
+                    "✓ COMPLETED"
+                } else {
+                    "✕ FAILED"
+                }
+        }
+    }
 
     ChintuTheme {
 
         if (showSettings) {
 
             SettingsScreen(
-                config = config,
+                cfg = null,
                 model = model,
-                mode = mode,
-
                 onModelChange = {
                     model = it
-                    config.set("model", it)
-                },
 
+                    providerManager.saveSettings(
+                        provider =
+                            providerManager.getProvider(),
+                        apiKey =
+                            apiKeyStore.getApiKey(
+                                providerManager.getProvider()
+                            ),
+                        serverUrl =
+                            serverConfigStore.getServerUrl(
+                                providerManager.getProvider()
+                            ),
+                        model = it
+                    )
+
+                    modelManager.selectModel(it)
+                },
+                mode = mode,
                 onModeChange = {
                     mode = it
                 },
-
                 memory = memory,
-
                 onBack = {
                     showSettings = false
                 }
@@ -148,83 +270,23 @@ private fun ChintuRoot(
 
             HomeScreen(
                 mode = mode,
-                model = model,
-                input = input,
                 status = status,
                 messages = messages,
-
-                onSettings = {
-                    showSettings = true
-                },
-
-                onModeClick = {
-                    showSettings = true
-                },
-
+                input = input,
                 onInputChange = {
                     input = it
                 },
-
-                onVoice = {
-
-                    microphonePermission.launch(
-                        Manifest.permission.RECORD_AUDIO
-                    )
-
-                    voice.listen(
-                        onText = {
-                            input = it
-                            status = "READY"
-                        },
-
-                        onError = {
-                            status = it
-                        }
-                    )
-                },
-
                 onSend = {
-
-                    val question = input.trim()
-
-                    if (question.isNotEmpty()) {
-
-                        messages.add(
-                            ChatMessage(
-                                role = "user",
-                                content = question
-                            )
-                        )
-
-                        input = ""
-                        status = "THINKING"
-
-                        activity.lifecycleScope.launch {
-
-                            val result =
-                                orchestrator.answer(
-                                    question,
-                                    mode,
-                                    model
-                                ) {
-                                    status = it
-                                }
-
-                            messages.add(
-                                ChatMessage(
-                                    role = "assistant",
-                                    content = result.text
-                                )
-                            )
-
-                            status =
-                                if (result.verified) {
-                                    "✓ COMPLETED"
-                                } else {
-                                    "✕ FAILED"
-                                }
-                        }
-                    }
+                    sendMessage()
+                },
+                onVoice = {
+                    startVoice()
+                },
+                onSettings = {
+                    showSettings = true
+                },
+                onQuickAction = {
+                    input = it
                 }
             )
         }
