@@ -2,7 +2,6 @@ package com.chintu.ai.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,37 +11,38 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.chintu.ai.ai.AiMode
 import com.chintu.ai.ai.ChatMessage
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
-    mode: AiMode,
     model: String,
-    input: String,
+    mode: AiMode,
     status: String,
     messages: List<ChatMessage>,
-    onSettings: () -> Unit,
-    onModeClick: () -> Unit,
+    input: String,
     onInputChange: (String) -> Unit,
+    onSend: () -> Unit,
     onVoice: () -> Unit,
-    onSend: () -> Unit
+    onSettings: () -> Unit,
+    onModeClick: (AiMode) -> Unit,
+    onQuickAction: (String) -> Unit
 ) {
     Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        containerColor = ChintuColors.Background,
+        containerColor = ChintuBackground,
 
         topBar = {
             TopAppBar(
@@ -50,23 +50,35 @@ fun HomeScreen(
                     Column {
                         Text(
                             text = "CHINTU",
-                            color = ChintuColors.TextPrimary,
-                            fontSize = 20.sp
+                            color = ChintuText,
+                            fontWeight = FontWeight.Bold
                         )
 
                         Text(
-                            text = "Personal AI Assistant",
-                            color = ChintuColors.TextMuted,
-                            fontSize = 10.sp
+                            text = if (model.isBlank()) {
+                                "Personal AI Assistant"
+                            } else {
+                                model
+                            },
+                            color = ChintuMuted,
+                            style = androidx.compose.material3.MaterialTheme.typography.labelSmall
                         )
                     }
                 },
 
+                navigationIcon = {
+                    OrbLogo()
+                },
+
                 actions = {
 
-                    StatusBadge(
-                        status = status,
-                        modifier = Modifier.padding(end = 4.dp)
+                    AssistChip(
+                        onClick = {
+                            onSettings()
+                        },
+                        label = {
+                            Text(mode.name)
+                        }
                     )
 
                     IconButton(
@@ -75,7 +87,7 @@ fun HomeScreen(
                         Icon(
                             imageVector = Icons.Default.Settings,
                             contentDescription = "Settings",
-                            tint = ChintuColors.TextPrimary
+                            tint = ChintuText
                         )
                     }
                 }
@@ -83,24 +95,13 @@ fun HomeScreen(
         },
 
         bottomBar = {
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(ChintuColors.Background)
-            ) {
-
-                PrivacyFooter(
-                    mode = mode.name
-                )
-
-                InputBar(
-                    value = input,
-                    onValueChange = onInputChange,
-                    onVoice = onVoice,
-                    onSend = onSend
-                )
-            }
+            InputBar(
+                input = input,
+                status = status,
+                onInputChange = onInputChange,
+                onVoice = onVoice,
+                onSend = onSend
+            )
         }
     ) { paddingValues ->
 
@@ -108,76 +109,54 @@ fun HomeScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            ChintuTop,
+                            ChintuBackground
+                        )
+                    )
+                )
         ) {
-
-            ModeSelector(
-                mode = mode,
-                onClick = onModeClick
-            )
 
             if (messages.isEmpty()) {
 
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .weight(1f),
-                    contentPadding = PaddingValues(
-                        top = 8.dp,
-                        bottom = 12.dp
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-
-                    item {
-
-                        WelcomeContent(
-                            model = model,
-                            status = status,
-                            modifier = Modifier.padding(
-                                top = 8.dp
-                            )
-                        )
-                    }
-
-                    item {
-
-                        QuickActions(
-                            onAction = onInputChange,
-                            modifier = Modifier.padding(
-                                top = 8.dp
-                            )
-                        )
-                    }
-                }
+                WelcomeContent(
+                    status = status
+                )
 
             } else {
 
-                Box(
+                LazyColumn(
                     modifier = Modifier
-                        .fillMaxSize()
                         .weight(1f)
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp),
+
+                    reverseLayout = true,
+
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+
+                    contentPadding = PaddingValues(
+                        top = 12.dp,
+                        bottom = 12.dp
+                    )
                 ) {
 
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(
-                            top = 8.dp,
-                            bottom = 12.dp
-                        ),
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
-                    ) {
+                    items(
+                        messages.reversed()
+                    ) { message ->
 
-                        items(
-                            items = messages
-                        ) { message ->
-
-                            MessageBubble(
-                                message = message
-                            )
-                        }
+                        MessageBubble(message)
                     }
                 }
             }
+
+            QuickActions(
+                onAction = onQuickAction
+            )
+
+            PrivacyFooter()
         }
     }
 }
