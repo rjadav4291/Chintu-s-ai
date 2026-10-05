@@ -71,7 +71,6 @@ fun HomeScreen(
                 },
 
                 actions = {
-
                     AssistChip(
                         onClick = {
                             onSettings()
@@ -82,7 +81,9 @@ fun HomeScreen(
                     )
 
                     IconButton(
-                        onClick = onSettings
+                        onClick = {
+                            onSettings()
+                        }
                     ) {
                         Icon(
                             imageVector = Icons.Default.Settings,
@@ -122,6 +123,7 @@ fun HomeScreen(
             if (messages.isEmpty()) {
 
                 WelcomeContent(
+                    model = model,
                     status = status
                 )
 
@@ -143,9 +145,7 @@ fun HomeScreen(
                     )
                 ) {
 
-                    items(
-                        messages.reversed()
-                    ) { message ->
+                    items(messages.reversed()) { message ->
 
                         MessageBubble(message)
                     }
@@ -156,7 +156,9 @@ fun HomeScreen(
                 onAction = onQuickAction
             )
 
-            PrivacyFooter()
+            PrivacyFooter(
+                mode = mode
+            )
         }
     }
 }
