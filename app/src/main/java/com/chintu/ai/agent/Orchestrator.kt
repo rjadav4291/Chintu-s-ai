@@ -1,10 +1,12 @@
 package com.chintu.ai.agent
 
-import com.chintu.ai.ai.*
+import com.chintu.ai.ai.AiMode
+import com.chintu.ai.ai.AiResponse
+import com.chintu.ai.ai.ChintuAiEngine
 import com.chintu.ai.memory.MemoryStore
 
 class Orchestrator(
-    private val registry: ProviderRegistry,
+    private val aiEngine: ChintuAiEngine,
     private val memory: MemoryStore
 ) {
 
@@ -18,134 +20,41 @@ class Orchestrator(
         onStatus("Understanding…")
 
         val local =
-            LocalCommandEngine(
-                memory
-            ).tryHandle(userText)
+            LocalCommandEngine(memory)
+                .tryHandle(userText)
 
         if (local != null) {
 
             onStatus("✓ Completed")
 
             return AiResponse(
-                local,
-                "Local command engine",
-                "local"
+                text = local,
+                provider = "Local command engine",
+                model = "local",
+                verified = true
             )
         }
 
-        if (
-            mode == AiMode.OFFLINE ||
-            mode == AiMode.PRIVATE
-        ) {
+        onStatus("Selecting AI…")
 
-            val p =
-                registry.select(mode)
-                    ?: return AiResponse(
-                        "Offline AI currently available nathi.",
-                        "CHINTU",
-                        "local",
-                        true
-                    )
+        onStatus("Thinking…")
 
+        val result =
+            aiEngine.ask(
+                userText = userText,
+                mode = mode
+            )
+
+        if (result.verified) {
             onStatus(
-                "Using ${p.displayName}…"
+                "Using ${result.provider} • ${result.model}"
             )
-
-            return runCatching {
-
-                p.generate(
-                    AiRequest(
-                        listOf(
-                            ChatMessage(
-                                "user",
-                                userText
-                            )
-                        ),
-                        model,
-                        systemPrompt(),
-                        mode
-                    )
-                )
-
-            }.getOrElse {
-
-                AiResponse(
-                    "Feature configured/support nathi: " +
-                        (
-                            it.message
-                                ?: "provider error"
-                            ),
-                    p.displayName,
-                    model,
-                    false
-                )
-            }
+        } else {
+            onStatus("✕ AI request failed")
         }
 
-        onStatus(
-            "Selecting AI…"
-        )
-
-        val p =
-            registry.select(mode)
-                ?: return AiResponse(
-                    "No AI provider is configured yet.",
-                    "CHINTU",
-                    model,
-                    false
-                )
-
-        onStatus(
-            "Using ${p.displayName}…"
-        )
-
-        return runCatching {
-
-            p.generate(
-                AiRequest(
-                    listOf(
-                        ChatMessage(
-                            "user",
-                            userText
-                        )
-                    ),
-                    model,
-                    systemPrompt(),
-                    mode
-                )
-            )
-
-        }.getOrElse {
-
-            AiResponse(
-                "AI request failed: " +
-                    (
-                        it.message
-                            ?: "unknown error"
-                        ),
-                p.displayName,
-                model,
-                false
-            )
-        }
+        return result
     }
-
-    private fun systemPrompt() =
-        """
-        You are CHINTU, an original personal AI assistant.
-
-        Be calm, friendly and concise by default.
-
-        Support:
-        Gujarati
-        Hindi
-        English
-        Hinglish
-
-        Never claim an action happened unless it was verified.
-
-        Respect the selected AI mode and privacy boundaries.
-        """.trimIndent()
 }
 
 class LocalCommandEngine(
@@ -153,38 +62,43 @@ class LocalCommandEngine(
 ) {
 
     fun tryHandle(
-        s: String
+        input: String
     ): String? {
 
-        val t =
-            s.trim()
-                .lowercase()
+        val text =
+            input.trim()
+
+        val lower =
+            text.lowercase()
 
         if (
-            t.startsWith("remember ") ||
-            t.startsWith("યાદ રાખ")
+            lower.startsWith("remember ") ||
+            text.startsWith("યાદ રાખ")
         ) {
 
-            memory.save(
-                "note",
-                s.substringAfter(
-                    ' '
+            val content =
+                text.substringAfter(
+                    " ",
+                    ""
                 ).trim()
-            )
 
-            return "✓ Memory saved."
+            if (content.isNotBlank()) {
+
+                memory.save(
+                    category = "note",
+                    content = content
+                )
+
+                return "✓ Memory saved."
+            }
         }
 
         if (
-            t.contains(
+            lower.contains(
                 "what do you remember"
             ) ||
-            t.contains(
-                "શું યાદ"
-            ) ||
-            t.contains(
-                "kya yaad"
-            )
+            text.contains("શું યાદ") ||
+            lower.contains("kya yaad")
         ) {
 
             return memory
@@ -198,15 +112,11 @@ class LocalCommandEngine(
         }
 
         if (
-            t.contains(
+            lower.contains(
                 "clear all memory"
             ) ||
-            t.contains(
-                "બધી મેમરી"
-            ) ||
-            t.contains(
-                "memory clear"
-            )
+            text.contains("બધી મેમરી") ||
+            lower.contains("memory clear")
         ) {
 
             memory.clear()
@@ -215,10 +125,8 @@ class LocalCommandEngine(
         }
 
         if (
-            t == "time" ||
-            t.contains(
-                "what time"
-            )
+            lower == "time" ||
+            lower.contains("what time")
         ) {
 
             return java.text.SimpleDateFormat(
@@ -230,10 +138,8 @@ class LocalCommandEngine(
         }
 
         if (
-            t == "date" ||
-            t.contains(
-                "today's date"
-            )
+            lower == "date" ||
+            lower.contains("today's date")
         ) {
 
             return java.text.SimpleDateFormat(
