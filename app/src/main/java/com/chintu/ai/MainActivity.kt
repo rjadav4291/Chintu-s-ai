@@ -6,16 +6,22 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -26,39 +32,63 @@ import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.Wifi
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import com.chintu.ai.agent.Orchestrator
-import com.chintu.ai.ai.*
+import com.chintu.ai.ai.AiMode
+import com.chintu.ai.ai.AnthropicProvider
+import com.chintu.ai.ai.ChatMessage
+import com.chintu.ai.ai.GeminiProvider
+import com.chintu.ai.ai.OpenAiCompatibleProvider
+import com.chintu.ai.ai.ProviderRegistry
+import com.chintu.ai.ai.SecureConfig
 import com.chintu.ai.memory.MemoryStore
 import com.chintu.ai.voice.VoiceEngine
 import kotlinx.coroutines.launch
 
-private val ChintuBackgroundTop = Color(0xFF07111F)
-private val ChintuBackgroundBottom = Color(0xFF02050A)
 private val ChintuBlue = Color(0xFF4DA3FF)
 private val ChintuCyan = Color(0xFF4DE8FF)
-private val ChintuCard = Color(0xFF0B1726)
-private val ChintuCard2 = Color(0xFF101F32)
+private val ChintuBackground = Color(0xFF02050A)
+private val ChintuTop = Color(0xFF08182A)
+private val ChintuCard = Color(0xFF0C1928)
+private val ChintuCard2 = Color(0xFF122337)
 private val ChintuText = Color(0xFFEAF4FF)
 private val ChintuMuted = Color(0xFF8EA4BA)
 
@@ -86,35 +116,28 @@ fun ChintuApp(activity: MainActivity) {
     }
 
     val providers = remember {
-
         ProviderRegistry(
             listOf(
-
                 OpenAiCompatibleProvider(
                     cfg,
                     "openai",
                     "OpenAI",
                     "https://api.openai.com/v1/chat/completions"
                 ),
-
                 OpenAiCompatibleProvider(
                     cfg,
                     "openrouter",
                     "OpenRouter",
                     "https://openrouter.ai/api/v1/chat/completions"
                 ),
-
                 OpenAiCompatibleProvider(
                     cfg,
                     "ollama",
                     "Ollama",
                     "http://127.0.0.1:11434/api/chat"
                 ),
-
                 AnthropicProvider(cfg),
-
                 GeminiProvider(cfg)
-
             )
         )
     }
@@ -136,10 +159,9 @@ fun ChintuApp(activity: MainActivity) {
 
     var model by remember {
         mutableStateOf(
-            cfg.get("model")
-                .ifBlank {
-                    "gpt-6-luna"
-                }
+            cfg.get("model").ifBlank {
+                "gpt-6-luna"
+            }
         )
     }
 
@@ -151,7 +173,7 @@ fun ChintuApp(activity: MainActivity) {
         mutableStateOf("READY")
     }
 
-    var settings by remember {
+    var showSettings by remember {
         mutableStateOf(false)
     }
 
@@ -159,363 +181,280 @@ fun ChintuApp(activity: MainActivity) {
         mutableStateListOf<ChatMessage>()
     }
 
-    val recordPermission =
+    val microphonePermission =
         rememberLauncherForActivityResult(
             ActivityResultContracts.RequestPermission()
         ) { granted ->
 
             if (!granted) {
-                status = "Microphone permission required"
+                status = "MIC PERMISSION NEEDED"
             }
         }
 
     MaterialTheme(
         colorScheme = darkColorScheme(
-            background = ChintuBackgroundBottom,
-            surface = ChintuCard,
             primary = ChintuBlue,
             secondary = ChintuCyan,
-            onBackground = ChintuText,
-            onSurface = ChintuText
+            background = ChintuBackground,
+            surface = ChintuCard
         )
     ) {
 
-        if (settings) {
+        if (showSettings) {
 
             SettingsScreen(
                 cfg = cfg,
                 model = model,
-                onModel = {
+                onModelChange = {
                     model = it
                     cfg.set("model", it)
                 },
                 mode = mode,
-                onMode = {
+                onModeChange = {
                     mode = it
                 },
                 memory = memory,
                 onBack = {
-                    settings = false
+                    showSettings = false
                 }
             )
 
         } else {
 
-            ChintuHomeScreen(
-                activity = activity,
-                mode = mode,
-                status = status,
-                input = input,
-                messages = messages,
+            Scaffold(
+                containerColor = Color.Transparent,
+                topBar = {
 
-                onSettings = {
-                    settings = true
-                },
+                    TopAppBar(
+                        title = {
+                            Column {
 
-                onMode = {
-                    settings = true
-                },
+                                Text(
+                                    text = "CHINTU",
+                                    color = ChintuText,
+                                    fontWeight = FontWeight.Bold
+                                )
 
-                onInputChange = {
-                    input = it
-                },
+                                Text(
+                                    text = "Personal AI Assistant",
+                                    color = ChintuMuted,
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            }
+                        },
 
-                onVoice = {
+                        navigationIcon = {
 
-                    recordPermission.launch(
-                        Manifest.permission.RECORD_AUDIO
+                            Box(
+                                modifier = Modifier
+                                    .padding(start = 12.dp)
+                                    .size(40.dp)
+                                    .background(
+                                        Brush.linearGradient(
+                                            listOf(
+                                                ChintuBlue,
+                                                ChintuCyan
+                                            )
+                                        ),
+                                        CircleShape
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+
+                                Text(
+                                    text = "C",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        },
+
+                        actions = {
+
+                            AssistChip(
+                                onClick = {
+                                    showSettings = true
+                                },
+                                label = {
+                                    Text(mode.name)
+                                }
+                            )
+
+                            IconButton(
+                                onClick = {
+                                    showSettings = true
+                                }
+                            ) {
+
+                                Icon(
+                                    imageVector = Icons.Default.Settings,
+                                    contentDescription = "Settings",
+                                    tint = ChintuText
+                                )
+                            }
+                        }
                     )
+                },
 
-                    voice.listen(
-                        {
+                bottomBar = {
+
+                    InputBar(
+                        input = input,
+                        status = status,
+                        onInputChange = {
                             input = it
                         },
-                        {
-                            status = it
-                        }
-                    )
-                },
+                        onVoice = {
 
-                onSend = {
-
-                    val question = input.trim()
-
-                    if (question.isNotEmpty()) {
-
-                        messages.add(
-                            ChatMessage(
-                                "user",
-                                question
+                            microphonePermission.launch(
+                                Manifest.permission.RECORD_AUDIO
                             )
-                        )
 
-                        input = ""
-                        status = "THINKING"
-
-                        activity.lifecycleScope.launch {
-
-                            val result =
-                                orchestrator.answer(
-                                    question,
-                                    mode,
-                                    model
-                                ) {
+                            voice.listen(
+                                {
+                                    input = it
+                                },
+                                {
                                     status = it
                                 }
-
-                            messages.add(
-                                ChatMessage(
-                                    "assistant",
-                                    result.text
-                                )
                             )
+                        },
+                        onSend = {
 
-                            status =
-                                if (result.verified) {
-                                    "✓ Completed"
-                                } else {
-                                    "✕ Failed"
+                            val question = input.trim()
+
+                            if (question.isNotEmpty()) {
+
+                                messages.add(
+                                    ChatMessage(
+                                        "user",
+                                        question
+                                    )
+                                )
+
+                                input = ""
+                                status = "THINKING"
+
+                                activity.lifecycleScope.launch {
+
+                                    val result =
+                                        orchestrator.answer(
+                                            question,
+                                            mode,
+                                            model
+                                        ) {
+                                            status = it
+                                        }
+
+                                    messages.add(
+                                        ChatMessage(
+                                            "assistant",
+                                            result.text
+                                        )
+                                    )
+
+                                    status =
+                                        if (result.verified) {
+                                            "✓ COMPLETED"
+                                        } else {
+                                            "✕ FAILED"
+                                        }
                                 }
+                            }
                         }
-                    }
+                    )
                 }
-            )
+
+            ) { padding ->
+
+                HomeContent(
+                    padding = padding,
+                    status = status,
+                    messages = messages,
+                    onQuickAction = {
+                        input = it
+                    }
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun ChintuHomeScreen(
-    activity: MainActivity,
-    mode: AiMode,
+private fun HomeContent(
+    padding: PaddingValues,
     status: String,
-    input: String,
     messages: List<ChatMessage>,
-    onSettings: () -> Unit,
-    onMode: () -> Unit,
-    onInputChange: (String) -> Unit,
-    onVoice: () -> Unit,
-    onSend: () -> Unit
+    onQuickAction: (String) -> Unit
 ) {
 
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxSize()
+            .padding(padding)
             .background(
                 Brush.verticalGradient(
                     listOf(
-                        ChintuBackgroundTop,
-                        ChintuBackgroundBottom
+                        ChintuTop,
+                        ChintuBackground
                     )
                 )
             )
     ) {
 
-        Column(
-            modifier = Modifier.fillMaxSize()
-        ) {
+        if (messages.isEmpty()) {
 
-            ChintuTopBar(
-                mode = mode,
-                onSettings = onSettings,
-                onMode = onMode
-            )
+            WelcomeContent(status)
 
-            if (messages.isEmpty()) {
+        } else {
 
-                WelcomeArea(
-                    status = status
+            LazyColumn(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp),
+                reverseLayout = true,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(
+                    top = 12.dp,
+                    bottom = 12.dp
                 )
-
-            } else {
-
-                LazyColumn(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .padding(
-                            horizontal = 14.dp
-                        ),
-                    reverseLayout = true,
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(
-                        top = 12.dp,
-                        bottom = 12.dp
-                    )
-                ) {
-
-                    items(
-                        messages.reversed()
-                    ) { message ->
-
-                        MessageBubble(
-                            message = message
-                        )
-                    }
-                }
-            }
-
-            QuickActions(
-                onAction = { action ->
-
-                    onInputChange(action)
-                }
-            )
-
-            ChintuInputBar(
-                input = input,
-                status = status,
-                onInputChange = onInputChange,
-                onVoice = onVoice,
-                onSend = onSend
-            )
-
-            Spacer(
-                Modifier.height(8.dp)
-            )
-
-            PrivacyFooter()
-
-            Spacer(
-                Modifier.height(10.dp)
-            )
-        }
-    }
-}
-
-@Composable
-private fun ChintuTopBar(
-    mode: AiMode,
-    onSettings: () -> Unit,
-    onMode: () -> Unit
-) {
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(
-                start = 18.dp,
-                end = 12.dp,
-                top = 14.dp,
-                bottom = 8.dp
-            ),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-
-        Box(
-            modifier = Modifier
-                .size(42.dp)
-                .background(
-                    Brush.linearGradient(
-                        listOf(
-                            ChintuBlue,
-                            ChintuCyan
-                        )
-                    ),
-                    CircleShape
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-
-            Text(
-                text = "C",
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.titleLarge
-            )
-        }
-
-        Spacer(
-            Modifier.width(10.dp)
-        )
-
-        Column(
-            modifier = Modifier.weight(1f)
-        ) {
-
-            Text(
-                text = "CHINTU",
-                color = ChintuText,
-                fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.titleLarge
-            )
-
-            Text(
-                text = "Personal AI Assistant",
-                color = ChintuMuted,
-                style = MaterialTheme.typography.labelSmall
-            )
-        }
-
-        Surface(
-            modifier = Modifier
-                .clickable {
-                    onMode()
-                },
-            shape = RoundedCornerShape(20.dp),
-            color = ChintuCard2
-        ) {
-
-            Row(
-                modifier = Modifier.padding(
-                    horizontal = 11.dp,
-                    vertical = 7.dp
-                ),
-                verticalAlignment = Alignment.CenterVertically
             ) {
 
-                Icon(
-                    imageVector = Icons.Default.Bolt,
-                    contentDescription = null,
-                    tint = ChintuCyan,
-                    modifier = Modifier.size(15.dp)
-                )
+                items(messages.reversed()) { message ->
 
-                Spacer(
-                    Modifier.width(5.dp)
-                )
-
-                Text(
-                    text = mode.name,
-                    color = ChintuText,
-                    fontWeight = FontWeight.SemiBold,
-                    style = MaterialTheme.typography.labelSmall
-                )
+                    MessageBubble(
+                        message = message
+                    )
+                }
             }
         }
 
-        IconButton(
-            onClick = onSettings
-        ) {
+        QuickActions(
+            onAction = onQuickAction
+        )
 
-            Icon(
-                imageVector = Icons.Default.Settings,
-                contentDescription = "Settings",
-                tint = ChintuText
-            )
-        }
+        PrivacyFooter()
     }
 }
 
 @Composable
-private fun WelcomeArea(
+private fun WelcomeContent(
     status: String
 ) {
 
     Column(
         modifier = Modifier
-            .fillMaxWidth()
-            .weight(1f),
+            .weight(1f)
+            .fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
 
-        ChintuOrb(
-            status = status
-        )
+        ChintuOrb(status)
 
         Spacer(
-            Modifier.height(20.dp)
+            Modifier.height(18.dp)
         )
 
         Text(
@@ -532,50 +471,27 @@ private fun WelcomeArea(
         Text(
             text = "Your personal AI assistant",
             color = ChintuMuted,
-            textAlign = TextAlign.Center,
-            style = MaterialTheme.typography.bodyMedium
+            textAlign = TextAlign.Center
         )
 
         Spacer(
-            Modifier.height(18.dp)
+            Modifier.height(14.dp)
         )
 
         Surface(
-            shape = RoundedCornerShape(20.dp),
-            color = ChintuCard,
-            border = androidx.compose.foundation.BorderStroke(
-                1.dp,
-                Color.White.copy(alpha = 0.06f)
-            )
+            shape = RoundedCornerShape(18.dp),
+            color = ChintuCard
         ) {
 
-            Row(
+            Text(
+                text = status,
                 modifier = Modifier.padding(
                     horizontal = 14.dp,
-                    vertical = 9.dp
+                    vertical = 8.dp
                 ),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-
-                Box(
-                    modifier = Modifier
-                        .size(7.dp)
-                        .background(
-                            Color(0xFF45E39B),
-                            CircleShape
-                        )
-                )
-
-                Spacer(
-                    Modifier.width(8.dp)
-                )
-
-                Text(
-                    text = status,
-                    color = ChintuMuted,
-                    style = MaterialTheme.typography.labelMedium
-                )
-            }
+                color = ChintuCyan,
+                style = MaterialTheme.typography.labelSmall
+            )
         }
     }
 }
@@ -585,55 +501,23 @@ private fun ChintuOrb(
     status: String
 ) {
 
-    val thinking =
-        status.contains(
-            "THINK",
-            ignoreCase = true
-        ) ||
-        status.contains(
-            "Using",
-            ignoreCase = true
-        ) ||
-        status.contains(
-            "LISTEN",
-            ignoreCase = true
-        )
+    val active =
+        status.contains("THINK", true) ||
+        status.contains("LISTEN", true)
 
-    val transition =
-        rememberInfiniteTransition(
-            label = "chintu_orb"
-        )
-
-    val pulse by transition.animateFloat(
-        initialValue = 0.94f,
-        targetValue = 1.06f,
-        animationSpec =
-            infiniteRepeatable(
-                animation = tween(
-                    durationMillis = 1400,
-                    easing = FastOutSlowInEasing
-                ),
-                repeatMode = RepeatMode.Reverse
-            ),
-        label = "orb_pulse"
-    )
+    val scale =
+        if (active) 1.06f else 1f
 
     Box(
-        modifier = Modifier.size(210.dp),
+        modifier = Modifier.size(190.dp),
         contentAlignment = Alignment.Center
     ) {
 
         Box(
             modifier = Modifier
-                .size(190.dp)
-                .scale(
-                    if (thinking) pulse
-                    else 1f
-                )
-                .alpha(
-                    if (thinking) 0.20f
-                    else 0.12f
-                )
+                .size(180.dp)
+                .scale(scale)
+                .alpha(0.16f)
                 .background(
                     Brush.radialGradient(
                         listOf(
@@ -646,46 +530,27 @@ private fun ChintuOrb(
                 )
         )
 
-        Box(
-            modifier = Modifier
-                .size(145.dp)
-                .background(
-                    Brush.radialGradient(
-                        listOf(
-                            Color(0xFF214D78),
-                            Color(0xFF0D2036),
-                            Color(0xFF07111F)
-                        )
-                    ),
-                    CircleShape
-                )
-                .border(
-                    width = 1.dp,
-                    brush = Brush.linearGradient(
-                        listOf(
-                            ChintuCyan,
-                            ChintuBlue
-                        )
-                    ),
-                    shape = CircleShape
-                ),
-            contentAlignment = Alignment.Center
+        Surface(
+            modifier = Modifier.size(135.dp),
+            shape = CircleShape,
+            color = Color(0xFF102A43),
+            border = BorderStroke(
+                1.dp,
+                ChintuCyan.copy(alpha = 0.7f)
+            )
         ) {
 
             Column(
-                horizontalAlignment = Alignment.CenterHorizontally
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
             ) {
 
                 Icon(
-                    imageVector =
-                        if (thinking) {
-                            Icons.Default.GraphicEq
-                        } else {
-                            Icons.Default.AutoAwesome
-                        },
+                    imageVector = Icons.Default.AutoAwesome,
                     contentDescription = null,
                     tint = ChintuCyan,
-                    modifier = Modifier.size(35.dp)
+                    modifier = Modifier.size(34.dp)
                 )
 
                 Spacer(
@@ -695,8 +560,7 @@ private fun ChintuOrb(
                 Text(
                     text = "CHINTU",
                     color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.titleMedium
+                    fontWeight = FontWeight.Bold
                 )
             }
         }
@@ -713,9 +577,9 @@ private fun QuickActions(
             .fillMaxWidth()
             .padding(
                 horizontal = 12.dp,
-                vertical = 5.dp
+                vertical = 6.dp
             ),
-        horizontalArrangement = Arrangement.spacedBy(7.dp)
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
 
         QuickActionChip(
@@ -750,7 +614,7 @@ private fun QuickActions(
 @Composable
 private fun QuickActionChip(
     modifier: Modifier,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     text: String,
     onClick: () -> Unit
 ) {
@@ -761,6 +625,73 @@ private fun QuickActionChip(
         },
         shape = RoundedCornerShape(14.dp),
         color = ChintuCard,
-        border = androidx.compose.foundation.BorderStroke(
+        border = BorderStroke(
             1.dp,
-        
+            Color.White.copy(alpha = 0.06f)
+        )
+    ) {
+
+        Row(
+            modifier = Modifier.padding(
+                horizontal = 8.dp,
+                vertical = 9.dp
+            ),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = ChintuCyan,
+                modifier = Modifier.size(16.dp)
+            )
+
+            Spacer(
+                Modifier.width(5.dp)
+            )
+
+            Text(
+                text = text,
+                color = ChintuText,
+                style = MaterialTheme.typography.labelSmall
+            )
+        }
+    }
+}
+
+@Composable
+private fun InputBar(
+    input: String,
+    status: String,
+    onInputChange: (String) -> Unit,
+    onVoice: () -> Unit,
+    onSend: () -> Unit
+) {
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(
+                horizontal = 12.dp,
+                vertical = 6.dp
+            ),
+        shape = RoundedCornerShape(25.dp),
+        color = ChintuCard2,
+        border = BorderStroke(
+            1.dp,
+            Color.White.copy(alpha = 0.08f)
+        )
+    ) {
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+
+            IconButton(
+                onClick = onVoice
+            ) {
+
+                Icon(
+                    imageVector =
+                        if (status.c
