@@ -15,66 +15,185 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
+
+      # --------------------------------------------------
+      # 1. Checkout CHINTU source code
+      # --------------------------------------------------
       - name: Checkout source
         uses: actions/checkout@v4
 
+
+      # --------------------------------------------------
+      # 2. Setup Java 17
+      # --------------------------------------------------
       - name: Setup Java 17
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
+
+      # --------------------------------------------------
+      # 3. Setup Android SDK
+      # --------------------------------------------------
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: 12266719
+          accept-android-sdk-licenses: false
 
+
+      # --------------------------------------------------
+      # 4. Install ONLY required Android SDK packages
+      # --------------------------------------------------
       - name: Install required Android SDK packages
         shell: bash
         run: |
-          set +e
+          set -e
 
-          SDKMANAGER="${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager"
+          SDKMANAGER="/usr/local/lib/android/sdk/cmdline-tools/16.0/bin/sdkmanager"
 
-          echo "Android SDK: ${ANDROID_HOME}"
-          echo "SDK Manager: ${SDKMANAGER}"
+          echo "=========================================="
+          echo "CHINTU Android SDK Setup"
+          echo "=========================================="
 
-          chmod +x "${SDKMANAGER}"
+          echo "SDK Manager:"
+          "$SDKMANAGER" --version
 
-          echo "Installing required Android SDK packages..."
+          echo ""
+          echo "Installing platform-tools..."
+          yes | "$SDKMANAGER" "platform-tools"
 
-          yes | "${SDKMANAGER}" \
-            "platform-tools" \
-            "platforms;android-35" \
-            "build-tools;35.0.0"
+          echo ""
+          echo "Installing Android 35 platform..."
+          yes | "$SDKMANAGER" "platforms;android-35"
 
-          echo "Android SDK package installation completed."
+          echo ""
+          echo "Installing Android 35 build tools..."
+          yes | "$SDKMANAGER" "build-tools;35.0.0"
 
+          echo ""
+          echo "=========================================="
+          echo "Android SDK installation completed"
+          echo "=========================================="
+
+
+      # --------------------------------------------------
+      # 5. Setup Gradle
+      # --------------------------------------------------
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
 
+
+      # --------------------------------------------------
+      # 6. Check CHINTU project
+      # --------------------------------------------------
       - name: Check project
+        shell: bash
         run: |
-          echo "Checking CHINTU project..."
+          echo "=========================================="
+          echo "CHINTU PROJECT FILES"
+          echo "=========================================="
+
           find . -maxdepth 6 -type f | sort
 
+          echo ""
+          echo "=========================================="
+          echo "Java version"
+          echo "=========================================="
+
+          java -version
+
+          echo ""
+          echo "=========================================="
+          echo "Gradle version"
+          echo "=========================================="
+
+          gradle --version
+
+
+      # --------------------------------------------------
+      # 7. Run unit tests
+      # --------------------------------------------------
       - name: Run unit tests
+        shell: bash
         run: |
+          echo "=========================================="
+          echo "Running CHINTU unit tests"
+          echo "=========================================="
+
           gradle test --stacktrace
 
+
+      # --------------------------------------------------
+      # 8. Build Debug APK
+      # --------------------------------------------------
       - name: Build Debug APK
+        shell: bash
         run: |
+          echo "=========================================="
+          echo "Building CHINTU Debug APK"
+          echo "=========================================="
+
           gradle assembleDebug --stacktrace
 
-      - name: Verify APK
-        run: |
-          test -f app/build/outputs/apk/debug/app-debug.apk
-          echo "CHINTU APK created successfully:"
-          ls -lh app/build/outputs/apk/debug/app-debug.apk
+          echo ""
+          echo "CHINTU APK build command completed."
 
+
+      # --------------------------------------------------
+      # 9. Verify APK
+      # --------------------------------------------------
+      - name: Verify APK
+        shell: bash
+        run: |
+          echo "=========================================="
+          echo "VERIFYING CHINTU APK"
+          echo "=========================================="
+
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+
+          if [ ! -f "$APK" ]; then
+            echo "ERROR: CHINTU APK was not created."
+            exit 1
+          fi
+
+          echo ""
+          echo "SUCCESS: CHINTU APK created."
+          echo ""
+          ls -lh "$APK"
+
+          echo ""
+          echo "APK location:"
+          echo "$APK"
+
+
+      # --------------------------------------------------
+      # 10. Upload APK to GitHub Actions
+      # --------------------------------------------------
       - name: Upload CHINTU APK
         uses: actions/upload-artifact@v4
         with:
           name: chintu-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+
+      # --------------------------------------------------
+      # 11. Build summary
+      # --------------------------------------------------
+      - name: CHINTU Build Summary
+        shell: bash
+        run: |
+          echo "=========================================="
+          echo "        CHINTU BUILD SUCCESS"
+          echo "=========================================="
+          echo ""
+          echo "APK: app/build/outputs/apk/debug/app-debug.apk"
+          echo ""
+          echo "The APK has been uploaded as:"
+          echo "chintu-debug-apk"
+          echo ""
+          echo "=========================================="
