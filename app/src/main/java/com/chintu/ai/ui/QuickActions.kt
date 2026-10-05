@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -36,24 +35,24 @@ fun QuickActions(
 ) {
     val actions = listOf(
         QuickAction(
-            "Ask AI",
-            Icons.Default.AutoAwesome,
-            "Tell me something useful"
+            title = "Ask AI",
+            icon = Icons.Default.AutoAwesome,
+            prompt = "Tell me something useful"
         ),
         QuickAction(
-            "Search",
-            Icons.Default.Search,
-            "Search the web for "
+            title = "Search",
+            icon = Icons.Default.Search,
+            prompt = "Search the web for "
         ),
         QuickAction(
-            "Memory",
-            Icons.Default.Memory,
-            "What do you remember about me?"
+            title = "Memory",
+            icon = Icons.Default.Memory,
+            prompt = "What do you remember about me?"
         ),
         QuickAction(
-            "Web",
-            Icons.Default.Language,
-            "Help me research "
+            title = "Web",
+            icon = Icons.Default.Language,
+            prompt = "Help me research "
         )
     )
 
@@ -68,6 +67,7 @@ fun QuickActions(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+
             QuickActionCard(
                 action = actions[0],
                 modifier = Modifier.weight(1f),
@@ -85,6 +85,7 @@ fun QuickActions(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+
             QuickActionCard(
                 action = actions[2],
                 modifier = Modifier.weight(1f),
