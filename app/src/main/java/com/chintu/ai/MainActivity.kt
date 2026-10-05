@@ -21,7 +21,6 @@ import com.chintu.ai.ai.ChatMessage
 import com.chintu.ai.ai.ModelManager
 import com.chintu.ai.ai.ProviderManager
 import com.chintu.ai.ai.ServerConfigStore
-import com.chintu.ai.ai.ChintuAiEngine
 import com.chintu.ai.agent.Orchestrator
 import com.chintu.ai.memory.MemoryStore
 import com.chintu.ai.ui.ChintuTheme
@@ -32,9 +31,7 @@ import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
-    override fun onCreate(
-        savedInstanceState: Bundle?
-    ) {
+    override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         setContent {
@@ -44,57 +41,41 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun ChintuApp(
-    activity: MainActivity
-) {
+fun ChintuApp(activity: MainActivity) {
 
-    val memory =
-        remember {
-            MemoryStore(activity)
-        }
+    val memory = remember {
+        MemoryStore(activity)
+    }
 
-    val voice =
-        remember {
-            VoiceEngine(activity)
-        }
+    val voice = remember {
+        VoiceEngine(activity)
+    }
 
-    val providerManager =
-        remember {
-            ProviderManager(activity)
-        }
+    val providerManager = remember {
+        ProviderManager(activity)
+    }
 
-    val apiKeyStore =
-        remember {
-            ApiKeyStore(activity)
-        }
+    val apiKeyStore = remember {
+        ApiKeyStore(activity)
+    }
 
-    val serverConfigStore =
-        remember {
-            ServerConfigStore(activity)
-        }
+    val serverConfigStore = remember {
+        ServerConfigStore(activity)
+    }
 
-    val modelManager =
-        remember {
-            ModelManager(activity)
-        }
+    val modelManager = remember {
+        ModelManager(activity)
+    }
 
-    val aiEngine =
-        remember {
-            ChintuAiEngine(activity)
-        }
-
-    val orchestrator =
-        remember {
-            Orchestrator(
-                aiEngine = aiEngine,
-                memory = memory
-            )
-        }
+    val orchestrator = remember {
+        Orchestrator(
+            aiEngine = com.chintu.ai.ai.ChintuAiEngine(activity),
+            memory = memory
+        )
+    }
 
     var mode by remember {
-        mutableStateOf(
-            AiMode.AUTO
-        )
+        mutableStateOf(AiMode.AUTO)
     }
 
     var model by remember {
@@ -118,15 +99,13 @@ fun ChintuApp(
         mutableStateOf(false)
     }
 
-    val messages =
-        remember {
-            mutableStateListOf<ChatMessage>()
-        }
+    val messages = remember {
+        mutableStateListOf<ChatMessage>()
+    }
 
     val micPermissionLauncher =
         rememberLauncherForActivityResult(
-            contract =
-                ActivityResultContracts.RequestPermission()
+            contract = ActivityResultContracts.RequestPermission()
         ) { granted ->
 
             if (granted) {
@@ -145,8 +124,7 @@ fun ChintuApp(
 
             } else {
 
-                status =
-                    "MIC PERMISSION NEEDED"
+                status = "MIC PERMISSION NEEDED"
             }
         }
 
@@ -182,13 +160,13 @@ fun ChintuApp(
 
     fun sendMessage() {
 
-        val question =
-            input.trim()
+        val question = input.trim()
 
-        if (
-            question.isEmpty() ||
-            status == "THINKING"
-        ) {
+        if (question.isEmpty()) {
+            return
+        }
+
+        if (status == "THINKING") {
             return
         }
 
@@ -200,6 +178,7 @@ fun ChintuApp(
         )
 
         input = ""
+
         status = "THINKING"
 
         activity.lifecycleScope.launch {
@@ -235,33 +214,27 @@ fun ChintuApp(
         if (showSettings) {
 
             SettingsScreen(
-                cfg = null,
                 model = model,
+
                 onModelChange = {
                     model = it
-
-                    providerManager.saveSettings(
-                        provider =
-                            providerManager.getProvider(),
-                        apiKey =
-                            apiKeyStore.getApiKey(
-                                providerManager.getProvider()
-                            ),
-                        serverUrl =
-                            serverConfigStore.getServerUrl(
-                                providerManager.getProvider()
-                            ),
-                        model = it
-                    )
-
-                    modelManager.selectModel(it)
                 },
+
                 mode = mode,
+
                 onModeChange = {
                     mode = it
                 },
+
                 memory = memory,
+
                 onBack = {
+                    model =
+                        providerManager.getModel()
+                            .ifBlank {
+                                modelManager.getSelectedModel()
+                            }
+
                     showSettings = false
                 }
             )
@@ -273,18 +246,23 @@ fun ChintuApp(
                 status = status,
                 messages = messages,
                 input = input,
+
                 onInputChange = {
                     input = it
                 },
+
                 onSend = {
                     sendMessage()
                 },
+
                 onVoice = {
                     startVoice()
                 },
+
                 onSettings = {
                     showSettings = true
                 },
+
                 onQuickAction = {
                     input = it
                 }
