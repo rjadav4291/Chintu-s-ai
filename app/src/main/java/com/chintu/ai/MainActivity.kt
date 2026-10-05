@@ -3,31 +3,41 @@ package com.chintu.ai
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
+
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
+
 import com.chintu.ai.ai.AiMode
 import com.chintu.ai.ai.ApiKeyStore
 import com.chintu.ai.ai.ChatMessage
+import com.chintu.ai.ai.ChintuAiEngine
 import com.chintu.ai.ai.ModelManager
 import com.chintu.ai.ai.ProviderManager
 import com.chintu.ai.ai.ServerConfigStore
+
 import com.chintu.ai.agent.Orchestrator
 import com.chintu.ai.memory.MemoryStore
+
 import com.chintu.ai.ui.ChintuTheme
 import com.chintu.ai.ui.HomeScreen
 import com.chintu.ai.ui.SettingsScreen
+
 import com.chintu.ai.voice.VoiceEngine
+
 import kotlinx.coroutines.launch
+
 
 class MainActivity : ComponentActivity() {
 
@@ -40,8 +50,15 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+
 @Composable
 fun ChintuApp(activity: MainActivity) {
+
+    /*
+     * ---------------------------------------------------------
+     * CORE STORES
+     * ---------------------------------------------------------
+     */
 
     val memory = remember {
         MemoryStore(activity)
@@ -67,12 +84,30 @@ fun ChintuApp(activity: MainActivity) {
         ModelManager(activity)
     }
 
+
+    /*
+     * ---------------------------------------------------------
+     * AI ENGINE + ORCHESTRATOR
+     * ---------------------------------------------------------
+     */
+
+    val aiEngine = remember {
+        ChintuAiEngine(activity)
+    }
+
     val orchestrator = remember {
         Orchestrator(
-            aiEngine = com.chintu.ai.ai.ChintuAiEngine(activity),
+            aiEngine = aiEngine,
             memory = memory
         )
     }
+
+
+    /*
+     * ---------------------------------------------------------
+     * UI STATE
+     * ---------------------------------------------------------
+     */
 
     var mode by remember {
         mutableStateOf(AiMode.AUTO)
@@ -80,7 +115,8 @@ fun ChintuApp(activity: MainActivity) {
 
     var model by remember {
         mutableStateOf(
-            providerManager.getModel()
+            providerManager
+                .getModel()
                 .ifBlank {
                     modelManager.getSelectedModel()
                 }
@@ -99,9 +135,23 @@ fun ChintuApp(activity: MainActivity) {
         mutableStateOf(false)
     }
 
+
+    /*
+     * ---------------------------------------------------------
+     * CHAT MESSAGES
+     * ---------------------------------------------------------
+     */
+
     val messages = remember {
         mutableStateListOf<ChatMessage>()
     }
+
+
+    /*
+     * ---------------------------------------------------------
+     * MICROPHONE PERMISSION
+     * ---------------------------------------------------------
+     */
 
     val micPermissionLauncher =
         rememberLauncherForActivityResult(
@@ -113,12 +163,17 @@ fun ChintuApp(activity: MainActivity) {
                 status = "LISTENING"
 
                 voice.listen(
-                    onText = {
-                        input = it
+
+                    onText = { text ->
+
+                        input = text
+
                         status = "READY"
                     },
-                    onError = {
-                        status = it
+
+                    onError = { error ->
+
+                        status = error
                     }
                 )
 
@@ -128,6 +183,13 @@ fun ChintuApp(activity: MainActivity) {
             }
         }
 
+
+    /*
+     * ---------------------------------------------------------
+     * START VOICE
+     * ---------------------------------------------------------
+     */
+
     fun startVoice() {
 
         val granted =
@@ -136,17 +198,23 @@ fun ChintuApp(activity: MainActivity) {
                 Manifest.permission.RECORD_AUDIO
             ) == PackageManager.PERMISSION_GRANTED
 
+
         if (granted) {
 
             status = "LISTENING"
 
             voice.listen(
-                onText = {
-                    input = it
+
+                onText = { text ->
+
+                    input = text
+
                     status = "READY"
                 },
-                onError = {
-                    status = it
+
+                onError = { error ->
+
+                    status = error
                 }
             )
 
@@ -158,17 +226,31 @@ fun ChintuApp(activity: MainActivity) {
         }
     }
 
+
+    /*
+     * ---------------------------------------------------------
+     * SEND MESSAGE
+     * ---------------------------------------------------------
+     */
+
     fun sendMessage() {
 
         val question = input.trim()
+
 
         if (question.isEmpty()) {
             return
         }
 
+
         if (status == "THINKING") {
             return
         }
+
+
+        /*
+         * Add user message
+         */
 
         messages.add(
             ChatMessage(
@@ -177,21 +259,46 @@ fun ChintuApp(activity: MainActivity) {
             )
         )
 
+
+        /*
+         * Clear input
+         */
+
         input = ""
 
+
+        /*
+         * Show thinking status
+         */
+
         status = "THINKING"
+
+
+        /*
+         * Run AI
+         */
 
         activity.lifecycleScope.launch {
 
             val result =
                 orchestrator.answer(
+
                     userText = question,
+
                     mode = mode,
+
                     model = model,
-                    onStatus = {
-                        status = it
+
+                    onStatus = { newStatus ->
+
+                        status = newStatus
                     }
                 )
+
+
+            /*
+             * Add assistant response
+             */
 
             messages.add(
                 ChatMessage(
@@ -200,71 +307,155 @@ fun ChintuApp(activity: MainActivity) {
                 )
             )
 
+
+            /*
+             * Final status
+             */
+
             status =
                 if (result.verified) {
+
                     "✓ COMPLETED"
+
                 } else {
+
                     "✕ FAILED"
                 }
         }
     }
 
+
+    /*
+     * ---------------------------------------------------------
+     * CHINTU THEME
+     * ---------------------------------------------------------
+     */
+
     ChintuTheme {
+
+
+        /*
+         * =====================================================
+         * SETTINGS SCREEN
+         * =====================================================
+         */
 
         if (showSettings) {
 
             SettingsScreen(
+
                 model = model,
 
-                onModelChange = {
-                    model = it
+                onModelChange = { selectedModel ->
+
+                    model = selectedModel
                 },
 
                 mode = mode,
 
-                onModeChange = {
-                    mode = it
+                onModeChange = { selectedMode ->
+
+                    mode = selectedMode
                 },
 
                 memory = memory,
 
                 onBack = {
+
+                    /*
+                     * Reload selected model
+                     */
+
                     model =
-                        providerManager.getModel()
+                        providerManager
+                            .getModel()
                             .ifBlank {
                                 modelManager.getSelectedModel()
                             }
+
+
+                    /*
+                     * Return to home
+                     */
 
                     showSettings = false
                 }
             )
 
+
         } else {
 
+
+            /*
+             * =================================================
+             * HOME SCREEN
+             * =================================================
+             *
+             * IMPORTANT:
+             * This matches the actual HomeScreen.kt signature.
+             *
+             * NO model parameter.
+             * NO onModeClick parameter.
+             */
+
             HomeScreen(
+
                 mode = mode,
+
                 status = status,
+
                 messages = messages,
+
                 input = input,
 
-                onInputChange = {
-                    input = it
+
+                /*
+                 * Input text changed
+                 */
+
+                onInputChange = { text ->
+
+                    input = text
                 },
 
+
+                /*
+                 * Send button
+                 */
+
                 onSend = {
+
                     sendMessage()
                 },
 
+
+                /*
+                 * Voice button
+                 */
+
                 onVoice = {
+
                     startVoice()
                 },
 
+
+                /*
+                 * Settings button
+                 */
+
                 onSettings = {
+
                     showSettings = true
                 },
 
-                onQuickAction = {
-                    input = it
+
+                /*
+                 * Quick action
+                 */
+
+                onQuickAction = { suggestion ->
+
+                    input = suggestion
                 }
             )
         }
