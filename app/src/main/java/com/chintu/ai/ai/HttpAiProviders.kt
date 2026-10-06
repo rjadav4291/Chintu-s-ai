@@ -8,6 +8,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
+import java.net.SocketTimeoutException
 import java.net.URL
 import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
@@ -32,10 +33,7 @@ class SecureConfig(context: Context) {
         return prefs.getString(key, "") ?: ""
     }
 
-    fun set(
-        key: String,
-        value: String
-    ) {
+    fun set(key: String, value: String) {
         prefs.edit()
             .putString(key, value)
             .apply()
@@ -48,10 +46,6 @@ class SecureConfig(context: Context) {
     }
 }
 
-/*
- * IMPORTANT:
- * Network request always runs on IO thread.
- */
 private suspend fun postJson(
     endpoint: String,
     headers: Map<String, String>,
@@ -64,7 +58,6 @@ private suspend fun postJson(
     try {
 
         connection.requestMethod = "POST"
-
         connection.connectTimeout =
             TimeUnit.SECONDS.toMillis(15).toInt()
 
@@ -72,7 +65,6 @@ private suspend fun postJson(
             TimeUnit.SECONDS.toMillis(90).toInt()
 
         connection.doOutput = true
-
         connection.useCaches = false
 
         connection.setRequestProperty(
@@ -86,22 +78,28 @@ private suspend fun postJson(
         )
 
         headers.forEach { (key, value) ->
-            connection.setRequestProperty(
-                key,
-                value
-            )
+            connection.setRequestProperty(key, value)
         }
 
-        val requestBody =
+        val requestBytes =
             body.toString().toByteArray(Charsets.UTF_8)
 
         connection.outputStream.use { output ->
-            output.write(requestBody)
+            output.write(requestBytes)
             output.flush()
         }
 
         val status =
-            connection.responseCode
+            try {
+                connection.responseCode
+            } catch (error: SocketTimeoutException) {
+                throw AiNetworkException(
+                    AiError(
+                        AiErrorType.TIMEOUT,
+                        "Provider request timed out."
+                    )
+                )
+            }
 
         val stream =
             if (status in 200..299) {
@@ -111,38 +109,77 @@ private suspend fun postJson(
             }
 
         val responseText =
-            stream
-                ?.bufferedReader()
-                ?.use { it.readText() }
-                ?: ""
+            stream?.bufferedReader()?.use {
+                it.readText()
+            } ?: ""
 
         if (status !in 200..299) {
 
-            throw IllegalStateException(
-                "HTTP $status: ${
-                    if (responseText.isBlank()) {
-                        "Empty error response"
-                    } else {
-                        responseText
-                    }
-                }"
+            val providerMessage =
+                try {
+                    val json = JSONObject(responseText)
+
+                    json.optJSONObject("error")
+                        ?.optString("message")
+                        ?.takeIf { it.isNotBlank() }
+                        ?: json.optString("message")
+                            .takeIf { it.isNotBlank() }
+                } catch (_: Exception) {
+                    null
+                }
+
+            val errorType =
+                when (status) {
+                    400 -> AiErrorType.INVALID_REQUEST
+                    401 -> AiErrorType.AUTHENTICATION
+                    403 -> AiErrorType.FORBIDDEN
+                    404 -> AiErrorType.NOT_FOUND
+                    402 -> AiErrorType.INSUFFICIENT_CREDITS
+                    429 -> AiErrorType.RATE_LIMIT
+                    in 500..599 -> AiErrorType.SERVER
+                    else -> AiErrorType.UNKNOWN
+                }
+
+            throw AiNetworkException(
+                AiError(
+                    type = errorType,
+                    message =
+                        providerMessage
+                            ?: "HTTP $status returned by provider.",
+                    httpStatus = status,
+                    providerMessage = providerMessage
+                )
             )
         }
 
         if (responseText.isBlank()) {
-            throw IllegalStateException(
-                "Provider returned an empty response."
+            throw AiNetworkException(
+                AiError(
+                    AiErrorType.INVALID_RESPONSE,
+                    "Provider returned an empty response."
+                )
             )
         }
 
-        JSONObject(responseText)
+        try {
+            JSONObject(responseText)
+        } catch (_: Exception) {
+            throw AiNetworkException(
+                AiError(
+                    AiErrorType.INVALID_RESPONSE,
+                    "Provider returned invalid JSON."
+                )
+            )
+        }
 
     } finally {
-
         connection.disconnect()
     }
 }
 
+private class AiNetworkException(
+    val aiError: AiError
+) : Exception(aiError.message)
 
 class OpenAiCompatibleProvider(
     private val cfg: SecureConfig,
@@ -152,10 +189,8 @@ class OpenAiCompatibleProvider(
 ) : AiProvider {
 
     override suspend fun isAvailable(): Boolean {
-
-        return cfg
-            .get("${id}_api_key")
-            .isNotBlank() || id == "ollama"
+        return cfg.get("${id}_api_key").isNotBlank() ||
+                id == ProviderManager.PROVIDER_OLLAMA
     }
 
     override suspend fun generate(
@@ -164,9 +199,7 @@ class OpenAiCompatibleProvider(
 
         val endpoint =
             cfg.get("${id}_endpoint")
-                .ifBlank {
-                    defaultEndpoint
-                }
+                .ifBlank { defaultEndpoint }
 
         val apiKey =
             cfg.get("${id}_api_key")
@@ -176,7 +209,10 @@ class OpenAiCompatibleProvider(
 
                 put(
                     JSONObject()
-                        .put("role", "system")
+                        .put(
+                            "role",
+                            "system"
+                        )
                         .put(
                             "content",
                             request.systemPrompt
@@ -199,6 +235,11 @@ class OpenAiCompatibleProvider(
                 }
             }
 
+        val maxTokens =
+            TokenBudget.clamp(
+                request.maxOutputTokens
+            )
+
         val body =
             JSONObject()
                 .put(
@@ -209,60 +250,87 @@ class OpenAiCompatibleProvider(
                     "messages",
                     messages
                 )
+                .put(
+                    "max_tokens",
+                    maxTokens
+                )
+                .put(
+                    "temperature",
+                    request.temperature
+                )
 
         val headers =
             if (apiKey.isBlank()) {
-
                 emptyMap()
-
             } else {
-
                 mapOf(
                     "Authorization" to
-                        "Bearer $apiKey"
+                            "Bearer $apiKey"
                 )
             }
 
-        val json =
-            postJson(
-                endpoint = endpoint,
-                headers = headers,
-                body = body
-            )
+        return try {
 
-        val text =
-            json
-                .optJSONArray("choices")
-                ?.optJSONObject(0)
-                ?.optJSONObject("message")
-                ?.optString("content")
-                ?.takeIf {
-                    it.isNotBlank()
-                }
-                ?: json
-                    .optJSONObject("message")
-                    ?.optString("content")
-                    ?.takeIf {
-                        it.isNotBlank()
-                    }
-                ?: json
-                    .optString("response")
-                    .takeIf {
-                        it.isNotBlank()
-                    }
-                ?: throw IllegalStateException(
-                    "Provider returned no assistant text. Response: $json"
+            val json =
+                postJson(
+                    endpoint,
+                    headers,
+                    body
                 )
 
-        return AiResponse(
-            text = text,
-            provider = displayName,
-            model = request.model,
-            verified = true
-        )
+            val text =
+                json.optJSONArray("choices")
+                    ?.optJSONObject(0)
+                    ?.optJSONObject("message")
+                    ?.optString("content")
+                    ?.takeIf { it.isNotBlank() }
+
+                    ?: json.optJSONObject("message")
+                        ?.optString("content")
+                        ?.takeIf { it.isNotBlank() }
+
+                    ?: json.optString("response")
+                        .takeIf { it.isNotBlank() }
+
+                    ?: throw AiNetworkException(
+                        AiError(
+                            AiErrorType.INVALID_RESPONSE,
+                            "Provider returned no assistant text."
+                        )
+                    )
+
+            AiResponse(
+                text = text,
+                provider = displayName,
+                model = request.model,
+                verified = true
+            )
+
+        } catch (error: AiNetworkException) {
+
+            throw error
+
+        } catch (error: SocketTimeoutException) {
+
+            throw AiNetworkException(
+                AiError(
+                    AiErrorType.TIMEOUT,
+                    "Provider request timed out."
+                )
+            )
+
+        } catch (error: Exception) {
+
+            throw AiNetworkException(
+                AiError(
+                    AiErrorType.NETWORK,
+                    error.message
+                        ?: "Unable to connect to provider."
+                )
+            )
+        }
     }
 }
-
 
 class AnthropicProvider(
     private val cfg: SecureConfig
@@ -273,9 +341,7 @@ class AnthropicProvider(
     override val displayName = "Anthropic"
 
     override suspend fun isAvailable(): Boolean {
-
-        return cfg
-            .get("anthropic_api_key")
+        return cfg.get("anthropic_api_key")
             .isNotBlank()
     }
 
@@ -314,7 +380,9 @@ class AnthropicProvider(
                 )
                 .put(
                     "max_tokens",
-                    2048
+                    TokenBudget.clamp(
+                        request.maxOutputTokens
+                    )
                 )
                 .put(
                     "system",
@@ -337,37 +405,51 @@ class AnthropicProvider(
         val headers =
             mapOf(
                 "x-api-key" to apiKey,
-                "anthropic-version" to "2023-06-01"
+                "anthropic-version" to
+                        "2023-06-01"
             )
 
-        val json =
-            postJson(
-                endpoint = endpoint,
-                headers = headers,
-                body = body
-            )
+        return try {
 
-        val text =
-            json
-                .optJSONArray("content")
-                ?.optJSONObject(0)
-                ?.optString("text")
-                ?.takeIf {
-                    it.isNotBlank()
-                }
-                ?: throw IllegalStateException(
-                    "Anthropic returned no text."
+            val json =
+                postJson(
+                    endpoint,
+                    headers,
+                    body
                 )
 
-        return AiResponse(
-            text = text,
-            provider = displayName,
-            model = request.model,
-            verified = true
-        )
+            val text =
+                json.optJSONArray("content")
+                    ?.optJSONObject(0)
+                    ?.optString("text")
+                    ?.takeIf { it.isNotBlank() }
+                    ?: throw AiNetworkException(
+                        AiError(
+                            AiErrorType.INVALID_RESPONSE,
+                            "Anthropic returned no text."
+                        )
+                    )
+
+            AiResponse(
+                text = text,
+                provider = displayName,
+                model = request.model,
+                verified = true
+            )
+
+        } catch (error: AiNetworkException) {
+            throw error
+        } catch (error: Exception) {
+            throw AiNetworkException(
+                AiError(
+                    AiErrorType.NETWORK,
+                    error.message
+                        ?: "Anthropic connection failed."
+                )
+            )
+        }
     }
 }
-
 
 class GeminiProvider(
     private val cfg: SecureConfig
@@ -378,9 +460,7 @@ class GeminiProvider(
     override val displayName = "Gemini"
 
     override suspend fun isAvailable(): Boolean {
-
-        return cfg
-            .get("gemini_api_key")
+        return cfg.get("gemini_api_key")
             .isNotBlank()
     }
 
@@ -440,6 +520,20 @@ class GeminiProvider(
                     "contents",
                     contents
                 )
+                .put(
+                    "generationConfig",
+                    JSONObject()
+                        .put(
+                            "maxOutputTokens",
+                            TokenBudget.clamp(
+                                request.maxOutputTokens
+                            )
+                        )
+                        .put(
+                            "temperature",
+                            request.temperature
+                        )
+                )
 
         val baseEndpoint =
             cfg.get("gemini_endpoint")
@@ -448,8 +542,7 @@ class GeminiProvider(
                 }
 
         val cleanEndpoint =
-            baseEndpoint
-                .removeSuffix("/")
+            baseEndpoint.removeSuffix("/")
 
         val endpoint =
             if (
@@ -473,33 +566,47 @@ class GeminiProvider(
                 )
             }"
 
-        val json =
-            postJson(
-                endpoint = url,
-                headers = emptyMap(),
-                body = body
-            )
+        return try {
 
-        val text =
-            json
-                .optJSONArray("candidates")
-                ?.optJSONObject(0)
-                ?.optJSONObject("content")
-                ?.optJSONArray("parts")
-                ?.optJSONObject(0)
-                ?.optString("text")
-                ?.takeIf {
-                    it.isNotBlank()
-                }
-                ?: throw IllegalStateException(
-                    "Gemini returned no text."
+            val json =
+                postJson(
+                    url,
+                    emptyMap(),
+                    body
                 )
 
-        return AiResponse(
-            text = text,
-            provider = displayName,
-            model = request.model,
-            verified = true
-        )
+            val text =
+                json.optJSONArray("candidates")
+                    ?.optJSONObject(0)
+                    ?.optJSONObject("content")
+                    ?.optJSONArray("parts")
+                    ?.optJSONObject(0)
+                    ?.optString("text")
+                    ?.takeIf { it.isNotBlank() }
+                    ?: throw AiNetworkException(
+                        AiError(
+                            AiErrorType.INVALID_RESPONSE,
+                            "Gemini returned no text."
+                        )
+                    )
+
+            AiResponse(
+                text = text,
+                provider = displayName,
+                model = request.model,
+                verified = true
+            )
+
+        } catch (error: AiNetworkException) {
+            throw error
+        } catch (error: Exception) {
+            throw AiNetworkException(
+                AiError(
+                    AiErrorType.NETWORK,
+                    error.message
+                        ?: "Gemini connection failed."
+                )
+            )
+        }
     }
 }
