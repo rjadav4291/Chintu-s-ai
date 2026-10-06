@@ -56,8 +56,8 @@ private suspend fun postJson(
         URL(endpoint).openConnection() as HttpURLConnection
 
     try {
-
         connection.requestMethod = "POST"
+
         connection.connectTimeout =
             TimeUnit.SECONDS.toMillis(15).toInt()
 
@@ -81,22 +81,23 @@ private suspend fun postJson(
             connection.setRequestProperty(key, value)
         }
 
-        val requestBytes =
-            body.toString().toByteArray(Charsets.UTF_8)
+        val requestBody =
+            body.toString()
+                .toByteArray(Charsets.UTF_8)
 
         connection.outputStream.use { output ->
-            output.write(requestBytes)
+            output.write(requestBody)
             output.flush()
         }
 
         val status =
             try {
                 connection.responseCode
-            } catch (error: SocketTimeoutException) {
-                throw AiNetworkException(
+            } catch (_: SocketTimeoutException) {
+                throw AiProviderException(
                     AiError(
-                        AiErrorType.TIMEOUT,
-                        "Provider request timed out."
+                        type = AiErrorType.TIMEOUT,
+                        message = "Provider request timed out."
                     )
                 )
             }
@@ -117,7 +118,8 @@ private suspend fun postJson(
 
             val providerMessage =
                 try {
-                    val json = JSONObject(responseText)
+                    val json =
+                        JSONObject(responseText)
 
                     json.optJSONObject("error")
                         ?.optString("message")
@@ -132,15 +134,15 @@ private suspend fun postJson(
                 when (status) {
                     400 -> AiErrorType.INVALID_REQUEST
                     401 -> AiErrorType.AUTHENTICATION
+                    402 -> AiErrorType.INSUFFICIENT_CREDITS
                     403 -> AiErrorType.FORBIDDEN
                     404 -> AiErrorType.NOT_FOUND
-                    402 -> AiErrorType.INSUFFICIENT_CREDITS
                     429 -> AiErrorType.RATE_LIMIT
                     in 500..599 -> AiErrorType.SERVER
                     else -> AiErrorType.UNKNOWN
                 }
 
-            throw AiNetworkException(
+            throw AiProviderException(
                 AiError(
                     type = errorType,
                     message =
@@ -153,10 +155,10 @@ private suspend fun postJson(
         }
 
         if (responseText.isBlank()) {
-            throw AiNetworkException(
+            throw AiProviderException(
                 AiError(
-                    AiErrorType.INVALID_RESPONSE,
-                    "Provider returned an empty response."
+                    type = AiErrorType.INVALID_RESPONSE,
+                    message = "Provider returned an empty response."
                 )
             )
         }
@@ -164,10 +166,10 @@ private suspend fun postJson(
         try {
             JSONObject(responseText)
         } catch (_: Exception) {
-            throw AiNetworkException(
+            throw AiProviderException(
                 AiError(
-                    AiErrorType.INVALID_RESPONSE,
-                    "Provider returned invalid JSON."
+                    type = AiErrorType.INVALID_RESPONSE,
+                    message = "Provider returned invalid JSON."
                 )
             )
         }
@@ -176,10 +178,6 @@ private suspend fun postJson(
         connection.disconnect()
     }
 }
-
-private class AiNetworkException(
-    val aiError: AiError
-) : Exception(aiError.message)
 
 class OpenAiCompatibleProvider(
     private val cfg: SecureConfig,
@@ -235,6 +233,11 @@ class OpenAiCompatibleProvider(
                 }
             }
 
+        /*
+         * Important:
+         * Never allow a huge default such as 65536.
+         * CHINTU controls the output budget.
+         */
         val maxTokens =
             TokenBudget.clamp(
                 request.maxOutputTokens
@@ -265,7 +268,7 @@ class OpenAiCompatibleProvider(
             } else {
                 mapOf(
                     "Authorization" to
-                            "Bearer $apiKey"
+                        "Bearer $apiKey"
                 )
             }
 
@@ -292,10 +295,11 @@ class OpenAiCompatibleProvider(
                     ?: json.optString("response")
                         .takeIf { it.isNotBlank() }
 
-                    ?: throw AiNetworkException(
+                    ?: throw AiProviderException(
                         AiError(
-                            AiErrorType.INVALID_RESPONSE,
-                            "Provider returned no assistant text."
+                            type = AiErrorType.INVALID_RESPONSE,
+                            message =
+                                "Provider returned no assistant text."
                         )
                     )
 
@@ -306,26 +310,27 @@ class OpenAiCompatibleProvider(
                 verified = true
             )
 
-        } catch (error: AiNetworkException) {
+        } catch (error: AiProviderException) {
 
             throw error
 
         } catch (error: SocketTimeoutException) {
 
-            throw AiNetworkException(
+            throw AiProviderException(
                 AiError(
-                    AiErrorType.TIMEOUT,
-                    "Provider request timed out."
+                    type = AiErrorType.TIMEOUT,
+                    message = "Provider request timed out."
                 )
             )
 
         } catch (error: Exception) {
 
-            throw AiNetworkException(
+            throw AiProviderException(
                 AiError(
-                    AiErrorType.NETWORK,
-                    error.message
-                        ?: "Unable to connect to provider."
+                    type = AiErrorType.NETWORK,
+                    message =
+                        error.message
+                            ?: "Unable to connect to provider."
                 )
             )
         }
@@ -406,7 +411,7 @@ class AnthropicProvider(
             mapOf(
                 "x-api-key" to apiKey,
                 "anthropic-version" to
-                        "2023-06-01"
+                    "2023-06-01"
             )
 
         return try {
@@ -423,10 +428,11 @@ class AnthropicProvider(
                     ?.optJSONObject(0)
                     ?.optString("text")
                     ?.takeIf { it.isNotBlank() }
-                    ?: throw AiNetworkException(
+                    ?: throw AiProviderException(
                         AiError(
-                            AiErrorType.INVALID_RESPONSE,
-                            "Anthropic returned no text."
+                            type = AiErrorType.INVALID_RESPONSE,
+                            message =
+                                "Anthropic returned no text."
                         )
                     )
 
@@ -437,14 +443,18 @@ class AnthropicProvider(
                 verified = true
             )
 
-        } catch (error: AiNetworkException) {
+        } catch (error: AiProviderException) {
+
             throw error
+
         } catch (error: Exception) {
-            throw AiNetworkException(
+
+            throw AiProviderException(
                 AiError(
-                    AiErrorType.NETWORK,
-                    error.message
-                        ?: "Anthropic connection failed."
+                    type = AiErrorType.NETWORK,
+                    message =
+                        error.message
+                            ?: "Anthropic connection failed."
                 )
             )
         }
@@ -583,10 +593,11 @@ class GeminiProvider(
                     ?.optJSONObject(0)
                     ?.optString("text")
                     ?.takeIf { it.isNotBlank() }
-                    ?: throw AiNetworkException(
+                    ?: throw AiProviderException(
                         AiError(
-                            AiErrorType.INVALID_RESPONSE,
-                            "Gemini returned no text."
+                            type = AiErrorType.INVALID_RESPONSE,
+                            message =
+                                "Gemini returned no text."
                         )
                     )
 
@@ -597,14 +608,18 @@ class GeminiProvider(
                 verified = true
             )
 
-        } catch (error: AiNetworkException) {
+        } catch (error: AiProviderException) {
+
             throw error
+
         } catch (error: Exception) {
-            throw AiNetworkException(
+
+            throw AiProviderException(
                 AiError(
-                    AiErrorType.NETWORK,
-                    error.message
-                        ?: "Gemini connection failed."
+                    type = AiErrorType.NETWORK,
+                    message =
+                        error.message
+                            ?: "Gemini connection failed."
                 )
             )
         }
